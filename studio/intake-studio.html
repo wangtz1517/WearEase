@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新增衣物标准化处理台 | 衣橱志</title>
+  <meta
+    name="description"
+    content="衣橱志新增衣物标准化处理台：上传实拍照片，生成透明背景标准归档图，并导出到衣柜系统。"
+  >
+  <link rel="stylesheet" href="./intake-studio.css">
+</head>
+<body>
+  <main class="studio-shell">
+    <header class="studio-header">
+      <a class="back-link" href="./index.html#wardrobe">返回衣柜</a>
+      <div class="header-copy">
+        <p class="studio-kicker">Wardrobe Intake Lab</p>
+        <h1>新增衣物标准化处理台</h1>
+        <p class="studio-summary">
+          这个独立页面先把“上传照片 -> 抠图 -> 标准归档图”做成可用原型。当前版本可以生成透明背景标准图；
+          如果原图存在折叠、遮挡、袖子未展开，仍需要后续接入后端 AI 服务做真实补全。
+        </p>
+      </div>
+    </header>
+
+    <section class="studio-layout">
+      <section class="control-column">
+        <section class="studio-panel upload-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Step 1</p>
+              <h2>上传原图 <span>Upload</span></h2>
+            </div>
+          </div>
+
+          <div class="dropzone" id="dropzone" tabindex="0" aria-label="上传衣物照片">
+            <input id="file-input" type="file" accept="image/*" hidden>
+            <p class="dropzone-title">拖拽衣物照片到这里</p>
+            <p class="dropzone-copy">支持单张照片。建议画面里只有一件衣物，背景尽量简洁。</p>
+            <div class="dropzone-actions">
+              <button class="primary-button" type="button" data-trigger-upload>选择文件</button>
+              <button class="ghost-button" type="button" data-load-demo>载入示例</button>
+            </div>
+          </div>
+
+          <label class="field">
+            <span>商品链接（可选）</span>
+            <input id="source-link" type="url" placeholder="后续可用于补充品牌、品类与购买信息">
+          </label>
+        </section>
+
+        <section class="studio-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Step 2</p>
+              <h2>标准化参数 <span>Controls</span></h2>
+            </div>
+          </div>
+
+          <div class="control-stack">
+            <div class="control-group">
+              <span class="group-label">衣物类型</span>
+              <div class="segmented" id="category-switcher">
+                <button class="segment is-active" type="button" data-category="top">上衣</button>
+                <button class="segment" type="button" data-category="bottom">裤装</button>
+                <button class="segment" type="button" data-category="outer">外套</button>
+                <button class="segment" type="button" data-category="dress">裙装</button>
+                <button class="segment" type="button" data-category="accessory">鞋包配饰</button>
+              </div>
+            </div>
+
+            <div class="range-grid">
+              <label class="range-field">
+                <span>抠图阈值</span>
+                <div class="range-row">
+                  <input id="threshold-range" type="range" min="10" max="120" value="44">
+                  <output id="threshold-output" for="threshold-range">44</output>
+                </div>
+              </label>
+
+              <label class="range-field">
+                <span>边缘柔化</span>
+                <div class="range-row">
+                  <input id="softness-range" type="range" min="4" max="72" value="24">
+                  <output id="softness-output" for="softness-range">24</output>
+                </div>
+              </label>
+
+              <label class="range-field">
+                <span>归档缩放</span>
+                <div class="range-row">
+                  <input id="scale-range" type="range" min="70" max="120" value="96">
+                  <output id="scale-output" for="scale-range">96%</output>
+                </div>
+              </label>
+
+              <label class="range-field">
+                <span>横向展开度</span>
+                <div class="range-row">
+                  <input id="width-range" type="range" min="80" max="135" value="100">
+                  <output id="width-output" for="width-range">100%</output>
+                </div>
+              </label>
+
+              <label class="range-field">
+                <span>纵向位置</span>
+                <div class="range-row">
+                  <input id="offset-range" type="range" min="-120" max="120" value="0">
+                  <output id="offset-output" for="offset-range">0</output>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button class="primary-button" type="button" id="process-button">重新生成</button>
+            <button class="ghost-button" type="button" id="download-button" disabled>导出透明 PNG</button>
+          </div>
+        </section>
+
+        <section class="studio-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Step 3</p>
+              <h2>处理流程 <span>Pipeline</span></h2>
+            </div>
+          </div>
+
+          <ol class="pipeline" id="pipeline">
+            <li class="pipeline-item" data-step="source">
+              <strong>原图接收</strong>
+              <span>等待上传衣物照片</span>
+            </li>
+            <li class="pipeline-item" data-step="mask">
+              <strong>背景抠图</strong>
+              <span>会根据边缘背景估计生成透明主体</span>
+            </li>
+            <li class="pipeline-item" data-step="layout">
+              <strong>标准模板归一</strong>
+              <span>根据品类将衣物映射到统一画布</span>
+            </li>
+            <li class="pipeline-item" data-step="expand">
+              <strong>展开补全评估</strong>
+              <span>检测是否需要后续 AI 展开补全</span>
+            </li>
+            <li class="pipeline-item" data-step="archive">
+              <strong>归档输出</strong>
+              <span>导出透明 PNG，供衣柜页入库</span>
+            </li>
+          </ol>
+
+          <div class="prototype-note" id="prototype-note">
+            当前是前端原型。透明抠图与标准化可直接体验，真实“袖子/裤腿展开”要等后端 AI 接入。
+          </div>
+        </section>
+      </section>
+
+      <section class="preview-column">
+        <section class="studio-panel preview-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Preview</p>
+              <h2>处理结果 <span>Preview</span></h2>
+            </div>
+            <div class="status-badge" id="preview-status">等待上传</div>
+          </div>
+
+          <div class="preview-grid">
+            <article class="preview-card">
+              <h3>原始照片</h3>
+              <div class="preview-stage" id="source-stage">
+                <canvas id="source-canvas"></canvas>
+                <p class="empty-hint" data-empty-for="source">上传后显示原图</p>
+              </div>
+            </article>
+
+            <article class="preview-card">
+              <h3>透明抠图</h3>
+              <div class="preview-stage checker" id="mask-stage">
+                <canvas id="mask-canvas"></canvas>
+                <p class="empty-hint" data-empty-for="mask">这里会生成透明背景图</p>
+              </div>
+            </article>
+
+            <article class="preview-card">
+              <h3>标准归档图</h3>
+              <div class="preview-stage checker tall" id="standard-stage">
+                <canvas id="standard-canvas" width="900" height="1200"></canvas>
+                <p class="empty-hint" data-empty-for="standard">这里会生成标准正视归档图</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="studio-panel archive-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Step 4</p>
+              <h2>归档信息 <span>Archive</span></h2>
+            </div>
+          </div>
+
+          <div class="archive-grid">
+            <label class="field">
+              <span>衣物名称</span>
+              <input id="garment-name" type="text" placeholder="例如：奶白色针织开衫">
+            </label>
+            <label class="field">
+              <span>收纳位置</span>
+              <input id="garment-location" type="text" value="待确认">
+            </label>
+            <label class="field">
+              <span>颜色标签</span>
+              <input id="garment-color" type="text" value="待识别">
+            </label>
+            <label class="field">
+              <span>季节标签</span>
+              <input id="garment-season" type="text" value="待识别">
+            </label>
+          </div>
+
+          <div class="summary-box" id="archive-summary">
+            上传照片后，这里会给出当前归档结果和是否建议接入 AI 展开补全。
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script src="./intake-studio.js"></script>
+</body>
+</html>

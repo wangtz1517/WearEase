@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>衣橱志 Atelier Archive</title>
+  <meta
+    name="description"
+    content="衣橱志：温馨、家庭化的个人电子衣柜。通过左侧菜单在首页、衣柜、穿搭和收纳之间切换。"
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="ambient-blur ambient-left"></div>
+  <div class="ambient-blur ambient-right"></div>
+
+  <div class="page-shell">
+    <aside class="sidebar">
+      <a class="brand-block" href="#home" data-view-link="home">
+        <span class="brand-mini">
+          <span class="brand-mini-char">衣</span>
+          <span class="brand-mini-char">橱</span>
+          <span class="brand-mini-char">志</span>
+        </span>
+        <div class="brand-full">
+          <p class="brand-mark">Home Wardrobe OS</p>
+          <h1>衣橱志</h1>
+          <p class="brand-subtitle">Atelier Archive</p>
+        </div>
+      </a>
+
+      <nav class="sidebar-nav">
+        <a href="#home" data-view-link="home">
+          <span class="menu-mini">⌂</span>
+          <span class="menu-full">首页</span>
+        </a>
+        <a href="#wardrobe" data-view-link="wardrobe">
+          <span class="menu-mini">◫</span>
+          <span class="menu-full">衣柜</span>
+        </a>
+        <a href="#outfit" data-view-link="outfit">
+          <span class="menu-mini">✦</span>
+          <span class="menu-full">穿搭</span>
+        </a>
+        <a href="#storage" data-view-link="storage">
+          <span class="menu-mini">▣</span>
+          <span class="menu-full">收纳</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-aux">
+        <button class="sidebar-utility-link" type="button" aria-label="个人">
+          <span class="menu-mini">◎</span>
+          <span class="menu-full">个人</span>
+        </button>
+        <button class="sidebar-utility-link" type="button" aria-label="设置">
+          <span class="menu-mini">⚙</span>
+          <span class="menu-full">设置</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <section class="page-view is-active" data-view="home" aria-hidden="false">
+        <header class="page-hero compact-hero">
+          <div class="page-hero-copy compact-copy">
+            <div class="title-pair page-title-pair">
+              <h2>衣橱整体概况</h2>
+              <p class="eyebrow">首页 / Home</p>
+            </div>
+            <p class="hero-text">只保留最核心的总览信息：总衣物、当季可穿、待整理，以及当前季节的整理重点。</p>
+          </div>
+        </header>
+
+        <section class="stats-grid">
+          <article class="metric-card">
+            <p class="metric-label">总衣物</p>
+            <strong>126</strong>
+            <span>含鞋包与配饰</span>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">当季可穿</p>
+            <strong><span data-season-count>42</span></strong>
+            <span data-current-season>当前季节：春季</span>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">待整理</p>
+            <strong>11</strong>
+            <span>待分类 / 待清洗 / 待收纳</span>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">最近新增</p>
+            <strong>3</strong>
+            <span>本周新录入单品</span>
+          </article>
+        </section>
+
+        <section class="glass-panel simple-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h3>当前衣橱概况</h3>
+            </div>
+          </div>
+
+          <div class="season-summary">
+            <article class="season-mini">
+              <span>常穿区</span>
+              <strong>左柜 18 件</strong>
+            </article>
+            <article class="season-mini">
+              <span>本季重点</span>
+              <strong>薄外套与针织层</strong>
+            </article>
+            <article class="season-mini">
+              <span>整理建议</span>
+              <strong>先处理未分类衣物</strong>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-view="wardrobe" aria-hidden="true">
+        <header class="page-hero compact-hero wardrobe-hero">
+          <div class="page-hero-copy compact-copy wardrobe-head-card">
+            <div class="wardrobe-head-row">
+              <div class="wardrobe-head-copy title-pair">
+                <h2>管理全部衣物</h2>
+                <p class="eyebrow">衣柜 / Wardrobe</p>
+              </div>
+
+              <div class="wardrobe-summary-strip">
+                <article class="wardrobe-summary-item">
+                  <span>上装</span>
+                  <strong>38</strong>
+                </article>
+                <article class="wardrobe-summary-item">
+                  <span>下装</span>
+                  <strong>24</strong>
+                </article>
+                <article class="wardrobe-summary-item">
+                  <span>外套</span>
+                  <strong>17</strong>
+                </article>
+                <article class="wardrobe-summary-item">
+                  <span>鞋包配饰</span>
+                  <strong>47</strong>
+                </article>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section class="glass-panel wardrobe-list-panel">
+          <div class="section-head wardrobe-list-head">
+            <div>
+              <p class="eyebrow">Wardrobe List</p>
+              <h3>衣服列表</h3>
+            </div>
+
+            <div class="wardrobe-list-actions">
+              <label class="search-shell light-shell wardrobe-search-shell">
+                <span>衣柜搜索</span>
+                <input id="wardrobe-search-input" type="text" placeholder="搜索衣物名称、位置或标签">
+              </label>
+
+              <div class="wardrobe-state-row" data-toggle-group data-wardrobe-state-group>
+                <button class="chip active" type="button" data-wardrobe-state="all">全部状态</button>
+                <button class="chip" type="button" data-wardrobe-state="active">当季外放</button>
+                <button class="chip" type="button" data-wardrobe-state="frequent">常穿</button>
+                <button class="chip" type="button" data-wardrobe-state="pending">待整理</button>
+              </div>
+
+              <button class="primary-button inline-button" type="button" data-open-add-modal>新增衣物</button>
+            </div>
+          </div>
+
+          <div class="shop-tab-row" data-toggle-group data-wardrobe-filter-group>
+            <button class="shop-tab active" type="button" data-wardrobe-filter="all">全部</button>
+            <button class="shop-tab" type="button" data-wardrobe-filter="top">上装</button>
+            <button class="shop-tab" type="button" data-wardrobe-filter="bottom">下装</button>
+            <button class="shop-tab" type="button" data-wardrobe-filter="outer">外套</button>
+            <button class="shop-tab" type="button" data-wardrobe-filter="accessory">鞋包配饰</button>
+          </div>
+
+          <div class="wardrobe-grid" id="wardrobe-grid">
+            <article
+              class="garment-card active-card"
+              data-garment-id="oxford-blue-shirt"
+              data-garment-type="top"
+              data-garment-state="frequent"
+              data-garment-name="牛津纺蓝衬衫"
+              data-garment-category="通勤 / 春秋 / 基础款"
+              data-garment-location="衣柜左区 / 第一杆"
+              data-garment-seasons="春 / 秋"
+              data-garment-frequency="高频"
+              data-garment-last-worn="3 天前"
+              data-garment-note="高兼容核心单品，适合通勤、叠穿和温差天气。"
+              data-garment-status="常穿"
+            >
+              <span class="card-ribbon">衣柜左区</span>
+              <div class="garment-figure shirt-figure"></div>
+              <h4>牛津纺蓝衬衫</h4>
+              <p>通勤 / 春秋 / 基础款</p>
+              <div class="garment-footer">
+                <span>常穿</span>
+                <span>最近 7 天穿过</span>
+              </div>
+            </article>
+
+            <article
+              class="garment-card"
+              data-garment-id="khaki-short-jacket"
+              data-garment-type="outer"
+              data-garment-state="active"
+              data-garment-name="浅卡其短外套"
+              data-garment-category="过渡季 / 休闲 / 城市通勤"
+              data-garment-location="外套层 / 中间段"
+              data-garment-seasons="春 / 秋"
+              data-garment-frequency="中高频"
+              data-garment-last-worn="7 天前"
+              data-garment-note="通勤与周末都能接入，适合作为春季温差层。"
+              data-garment-status="春季核心"
+            >
+              <span class="card-ribbon">外套层</span>
+              <div class="garment-figure jacket-figure"></div>
+              <h4>浅卡其短外套</h4>
+              <p>过渡季 / 休闲 / 城市通勤</p>
+              <div class="garment-footer">
+                <span>春季核心</span>
+                <span>易搭配</span>
+              </div>
+            </article>
+
+            <article
+              class="garment-card"
+              data-garment-id="charcoal-tapered-trousers"
+              data-garment-type="bottom"
+              data-garment-state="frequent"
+              data-garment-name="深灰锥形西裤"
+              data-garment-category="通勤 / 四季 / 精简轮廓"
+              data-garment-location="裤装抽屉 / 第一层"
+              data-garment-seasons="四季"
+              data-garment-frequency="高频"
+              data-garment-last-worn="2 天前"
+              data-garment-note="稳定的中性色下装，可快速接入衬衫和针织。"
+              data-garment-status="正式感"
+            >
+              <span class="card-ribbon">裤装抽屉</span>
+              <div class="garment-figure pants-figure"></div>
+              <h4>深灰锥形西裤</h4>
+              <p>通勤 / 四季 / 精简轮廓</p>
+              <div class="garment-footer">
+                <span>正式感</span>
+                <span>常穿</span>
+              </div>
+            </article>
+
+            <article
+              class="garment-card"
+              data-garment-id="cream-knitwear"
+              data-garment-type="top"
+              data-garment-state="active"
+              data-garment-name="奶油色针织衫"
+              data-garment-category="春秋 / 柔和色组 / 居家外出两用"
+              data-garment-location="右柜第二层"
+              data-garment-seasons="春 / 秋"
+              data-garment-frequency="中频"
+              data-garment-last-worn="5 天前"
+              data-garment-note="柔软单品，适合和裙装、裤装都做温柔搭配。"
+              data-garment-status="温差备用"
+            >
+              <span class="card-ribbon">右柜第二层</span>
+              <div class="garment-figure knit-figure"></div>
+              <h4>奶油色针织衫</h4>
+              <p>春秋 / 柔和色组 / 居家外出两用</p>
+              <div class="garment-footer">
+                <span>柔软层</span>
+                <span>温差备用</span>
+              </div>
+            </article>
+
+            <article
+              class="garment-card"
+              data-garment-id="forest-midi-skirt"
+              data-garment-type="bottom"
+              data-garment-state="pending"
+              data-garment-name="墨绿中长裙"
+              data-garment-category="春夏 / 周末 / 轻复古"
+              data-garment-location="裙装区 / 右侧"
+              data-garment-seasons="春 / 夏"
+              data-garment-frequency="中低频"
+              data-garment-last-worn="14 天前"
+              data-garment-note="更适合周末场景，可以和浅色针织做轻复古组合。"
+              data-garment-status="周末优先"
+            >
+              <span class="card-ribbon">裙装区</span>
+              <div class="garment-figure skirt-figure"></div>
+              <h4>墨绿中长裙</h4>
+              <p>春夏 / 周末 / 轻复古</p>
+              <div class="garment-footer">
+                <span>轻盈感</span>
+                <span>周末优先</span>
+              </div>
+            </article>
+
+            <article
+              class="garment-card"
+              data-garment-id="brown-loafers"
+              data-garment-type="accessory"
+              data-garment-state="frequent"
+              data-garment-name="棕色乐福鞋"
+              data-garment-category="通勤 / 四季 / 稳定搭配核心"
+              data-garment-location="鞋柜下层 / 常穿位"
+              data-garment-seasons="四季"
+              data-garment-frequency="高频"
+              data-garment-last-worn="1 天前"
+              data-garment-note="高利用率鞋履，适合连接通勤裤装和裙装。"
+              data-garment-status="高利用率"
+            >
+              <span class="card-ribbon">鞋柜下层</span>
+              <div class="garment-figure shoe-figure"></div>
+              <h4>棕色乐福鞋</h4>
+              <p>通勤 / 四季 / 稳定搭配核心</p>
+              <div class="garment-footer">
+                <span>高利用率</span>
+                <span>易清洁</span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-view="outfit" aria-hidden="true">
+        <header class="page-hero compact-hero">
+          <div class="page-hero-copy compact-copy">
+            <div class="title-pair page-title-pair">
+              <h2>生成你的搭配</h2>
+              <p class="eyebrow">穿搭 / Outfit</p>
+            </div>
+            <p class="hero-text">保留场景选择和自动搭配，让衣柜直接给出几套能穿的答案。</p>
+
+            <div class="season-switcher" aria-label="切换季节">
+              <button class="season-button active" type="button" data-season="spring">春</button>
+              <button class="season-button" type="button" data-season="summer">夏</button>
+              <button class="season-button" type="button" data-season="autumn">秋</button>
+              <button class="season-button" type="button" data-season="winter">冬</button>
+            </div>
+
+            <p class="season-caption" data-current-season>当前季节：春季</p>
+          </div>
+        </header>
+
+        <section class="glass-panel scenario-panel simple-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Scene Generator</p>
+              <h3>场景生成器</h3>
+            </div>
+          </div>
+
+          <div class="scenario-row" data-toggle-group>
+            <button class="chip active" type="button">通勤</button>
+            <button class="chip" type="button">周末</button>
+            <button class="chip" type="button">约会</button>
+            <button class="chip" type="button">旅行</button>
+          </div>
+
+          <p class="season-caption" data-outfit-note>适合春季晨晚温差，通勤时不显厚重。</p>
+        </section>
+
+        <section class="feature-band compact-feature-band">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Auto Outfit</p>
+              <h3>自动搭配</h3>
+            </div>
+          </div>
+
+          <div class="outfit-grid simple-outfit-grid">
+            <article class="outfit-card">
+              <p class="mini-title">方案 A</p>
+              <h4>蓝衬衫 + 深灰西裤 + 卡其短外套</h4>
+              <p>适合工作日通勤，结构稳，早晚温差也方便增减层次。</p>
+              <div class="tag-row">
+                <span>通勤</span>
+                <span>春季</span>
+                <span>低出错率</span>
+              </div>
+            </article>
+
+            <article class="outfit-card accent-card">
+              <p class="mini-title">方案 B</p>
+              <h4>奶油针织 + 墨绿中长裙 + 乐福鞋</h4>
+              <p>更轻松一点，适合周末出门和轻社交场景。</p>
+              <div class="tag-row">
+                <span>周末</span>
+                <span>柔和色组</span>
+                <span>轻复古</span>
+              </div>
+            </article>
+
+            <article class="outfit-card">
+              <p class="mini-title">方案 C</p>
+              <h4>白衬衫 + 直筒裤 + 乐福鞋</h4>
+              <p>更简洁、更耐穿，适合需要快速出门的普通工作日。</p>
+              <div class="tag-row">
+                <span>日常</span>
+                <span>极简</span>
+                <span>易复制</span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-view="storage" aria-hidden="true">
+        <header class="page-hero compact-hero">
+          <div class="page-hero-copy compact-copy">
+            <div class="title-pair page-title-pair">
+              <h2>辅助你的收纳</h2>
+              <p class="eyebrow">收纳 / Storage</p>
+            </div>
+            <p class="hero-text">只保留换季最关键的信息：什么该留在外面，什么该收起来。</p>
+
+            <div class="season-switcher" aria-label="切换季节">
+              <button class="season-button active" type="button" data-season="spring">春</button>
+              <button class="season-button" type="button" data-season="summer">夏</button>
+              <button class="season-button" type="button" data-season="autumn">秋</button>
+              <button class="season-button" type="button" data-season="winter">冬</button>
+            </div>
+
+            <p class="season-caption" data-current-season>当前季节：春季</p>
+          </div>
+        </header>
+
+        <section class="glass-panel simple-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Seasonal Plan</p>
+              <h3>整理建议</h3>
+            </div>
+            <span class="status-pill muted" data-seasonal-status>当前推荐：春季温和区间</span>
+          </div>
+
+          <div class="season-summary">
+            <article class="season-mini">
+              <span>留在外面</span>
+              <strong data-season-keep-count>42 件</strong>
+            </article>
+            <article class="season-mini">
+              <span>建议收纳</span>
+              <strong data-season-store-count>18 件</strong>
+            </article>
+            <article class="season-mini">
+              <span>优先整理</span>
+              <strong data-season-focus-text>厚针织与围巾</strong>
+            </article>
+          </div>
+
+          <div class="season-board">
+            <div class="season-column keep-column">
+              <h4>建议留在外面的衣物</h4>
+              <ul data-season-keep-list>
+                <li>轻薄衬衫 8 件</li>
+                <li>常规针织 6 件</li>
+                <li>春季外套 4 件</li>
+                <li>通勤裤装 7 件</li>
+              </ul>
+            </div>
+            <div class="season-column store-column">
+              <h4>建议收纳起来的衣物</h4>
+              <ul data-season-store-list>
+                <li>厚羽绒 3 件</li>
+                <li>重磅毛衣 5 件</li>
+                <li>冬季围巾手套 6 件</li>
+                <li>厚绒外套 4 件</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <div class="modal-backdrop" id="add-garment-modal" hidden>
+        <div class="modal-panel add-garment-modal" role="dialog" aria-modal="true" aria-labelledby="add-garment-title">
+          <div class="section-head modal-head">
+            <div>
+              <p class="eyebrow">New Item</p>
+              <h3 id="add-garment-title">新增衣物</h3>
+            </div>
+            <button class="ghost-button modal-close" type="button" data-close-add-modal>关闭</button>
+          </div>
+
+          <div class="upload-zone modal-upload-zone">
+            <div>
+              <p class="upload-title">上传照片或粘贴商品链接</p>
+              <p>系统会自动识别分类、颜色、季节，并生成标准主图。</p>
+            </div>
+            <button class="primary-button inline-button" type="button">选择文件</button>
+          </div>
+
+          <div class="intake-preview modal-preview">
+            <div class="preview-frame">
+              <div class="garment-figure knit-figure"></div>
+            </div>
+            <div class="preview-copy">
+              <p class="mini-title">最新识别</p>
+              <h4>奶白色开衫</h4>
+              <p>针织 / 春秋 / 居家外出两用 / 暂放右柜第二层。</p>
+              <div class="tag-row">
+                <span>自动裁切</span>
+                <span>背景简化</span>
+                <span>待确认标签</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
