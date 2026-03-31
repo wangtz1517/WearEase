@@ -1,35 +1,17 @@
 # AI Intake Service
 
-本目录是“新增衣物 AI 标准化”本地服务骨架。
+本目录是“新增衣物 AI 标准化”的本地后端服务。
 
-当前目标不是立刻跑出真实 AI 图，而是先把下面这些基础能力搭起来：
+当前支持两种 provider：
 
-- 接收前端上传
-- 创建任务
-- 保存源图
-- 查询任务状态
-- Provider 抽象
-- Mock Provider 占位
+- `mock`
+  用于联调网页和任务流程，不调用真实 AI
+- `seedream`
+  调用火山方舟 Seedream 图片生成接口，返回真实标准图
 
-## 当前状态
+## 启动
 
-已完成：
-
-- 本地 HTTP 服务
-- `POST /api/intake/jobs`
-- `GET /api/intake/jobs/:jobId`
-- `GET /api/intake/jobs/:jobId/artifacts/:kind`
-- 本地任务 JSON 落盘
-- 本地源图落盘
-- Mock Provider 任务编排
-
-未完成：
-
-- 真实 AI 分割
-- 真实标准图生成
-- 与 `intake-studio.html` 的前端联调
-
-## 启动方式
+默认使用 `mock`：
 
 ```bash
 cd ai-intake-service
@@ -37,12 +19,61 @@ node src/server.js
 ```
 
 默认端口：
-
 `8123`
 
 健康检查：
-
 `GET http://127.0.0.1:8123/health`
+
+## 使用 Seedream
+
+不要把 API Key 写进代码里，使用环境变量启动。
+
+也可以直接使用一键启动脚本：
+
+```powershell
+.\start-ai-intake.ps1
+```
+
+或在项目根目录双击：
+
+```text
+start-ai-intake.bat
+```
+
+脚本会自动读取 `ai-intake-service/.env`。
+
+首次使用时：
+
+1. 复制 `ai-intake-service/.env.example` 为 `ai-intake-service/.env`
+2. 把 `VOLCENGINE_API_KEY` 改成你自己的 Key
+3. 再运行脚本
+
+PowerShell 示例：
+
+```powershell
+$env:AI_PROVIDER="seedream"
+$env:VOLCENGINE_API_KEY="你的新APIKey"
+$env:VOLCENGINE_IMAGE_MODEL="doubao-seedream-5-0-260128"
+node src/server.js
+```
+
+可选环境变量：
+
+- `AI_PROVIDER`
+  `mock` 或 `seedream`
+- `VOLCENGINE_API_KEY`
+  火山方舟 API Key
+- `VOLCENGINE_IMAGE_MODEL`
+  默认 `doubao-seedream-5-0-260128`
+- `VOLCENGINE_BASE_URL`
+  默认 `https://ark.cn-beijing.volces.com/api/v3`
+
+说明：
+
+- 当前 `seedream` provider 会把上传图作为参考图传给模型
+- 当前只生成 `standard` 产物
+- `mask` 还没有接入独立抠图模型，所以会为空
+- 最终结果仍建议人工复核
 
 ## 接口
 
@@ -50,15 +81,15 @@ node src/server.js
 
 `POST /api/intake/jobs`
 
-请求体：
+请求示例：
 
 ```json
 {
   "sourceImageDataUrl": "data:image/png;base64,...",
   "sourceFilename": "shirt.png",
   "categoryHint": "top",
-  "garmentName": "白色针织衫",
-  "notes": "生成标准平铺图"
+  "garmentName": "白色针织上衣",
+  "notes": "生成标准归档图"
 }
 ```
 
@@ -70,18 +101,4 @@ node src/server.js
 
 `GET /api/intake/jobs/:jobId/artifacts/source`
 
-当前只有 `source` 一定存在。
-
-## 下一步
-
-下一步要做的事很明确：
-
-- 前端 intake-studio 改成调这个服务
-- 再接真实 AI Provider
-
-要继续往下做，需要你后面提供：
-
-- AI 平台选择
-- API Key
-- 样例衣物图片
-- 理想输出参考图
+`GET /api/intake/jobs/:jobId/artifacts/standard`

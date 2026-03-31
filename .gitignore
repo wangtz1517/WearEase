@@ -1,3 +1,4 @@
 ﻿ai-intake-service/storage/
 ai-intake-service/.env
 node_modules/
+assets/ai-test/

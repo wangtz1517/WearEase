@@ -29,6 +29,14 @@ const viewConfig = {
   }
 };
 
+viewConfig.add = {
+  title: "Atelier Archive | 新增你的衣物",
+  intro: "在独立页面中上传原图、调用 AI 生成标准图，并把结果回填进主衣柜。",
+  viewName: "新增",
+  focus: "上传原图、生成标准图并加入衣柜。",
+  mode: "新增模式"
+};
+
 const seasonConfig = {
   spring: {
     label: "春季",
@@ -84,8 +92,7 @@ const sidebarSlogan = "一个 J 人的赛博衣橱";
 
 const viewLinks = document.querySelectorAll("[data-view-link]");
 const navLinks = document.querySelectorAll(".sidebar-nav [data-view-link]");
-const viewPanels = document.querySelectorAll(".page-view");
-const toggleGroups = document.querySelectorAll("[data-toggle-group]");
+let toggleGroups = document.querySelectorAll("[data-toggle-group]");
 const globalSearchInput = document.querySelector("#global-search-input");
 const globalSearchResults = document.querySelector("#global-search-results");
 
@@ -101,6 +108,8 @@ const addGarmentModalPanel = addGarmentModal ? addGarmentModal.querySelector(".m
 const addGarmentCloseButton = addGarmentModal
   ? addGarmentModal.querySelector("[data-close-add-modal]")
   : null;
+const embeddedIntakePanel = document.querySelector("#embedded-intake-panel");
+const embeddedIntakeFrame = document.querySelector("#embedded-intake-frame");
 
 const seasonButtons = document.querySelectorAll(".season-button");
 const seasonCountNodes = document.querySelectorAll("[data-season-count]");
@@ -112,7 +121,8 @@ const seasonStoreCountNodes = document.querySelectorAll("[data-season-store-coun
 const seasonFocusNodes = document.querySelectorAll("[data-season-focus-text]");
 const seasonKeepLists = document.querySelectorAll("[data-season-keep-list]");
 const seasonStoreLists = document.querySelectorAll("[data-season-store-list]");
-const garmentCards = document.querySelectorAll("[data-garment-id]");
+const wardrobeGrid = document.querySelector("#wardrobe-grid");
+const wardrobeSummaryCounts = document.querySelectorAll(".wardrobe-summary-strip strong");
 const detailName = document.querySelector("#detail-name");
 const detailLocation = document.querySelector("#detail-location");
 const detailSeasons = document.querySelector("#detail-seasons");
@@ -130,12 +140,114 @@ let currentView = "home";
 let currentSeason = "spring";
 let currentWardrobeFilter = "all";
 let currentWardrobeState = "all";
+let currentWardrobeView = "board";
 let lastAddGarmentTrigger = null;
+let isEmbeddedIntakeOpen = false;
+const CUSTOM_GARMENTS_KEY = "atelier-archive-custom-garments";
+const WARDROBE_VIEW_KEY = "atelier-archive-wardrobe-view";
 const savedOutfits = new Set(
   Array.from(favoriteButtons)
     .filter((button) => button.classList.contains("is-saved"))
     .map((button) => button.dataset.outfitId)
 );
+
+try {
+  currentWardrobeView = window.localStorage.getItem(WARDROBE_VIEW_KEY) === "list" ? "list" : "board";
+} catch {
+  currentWardrobeView = "board";
+}
+
+function getGarmentCards() {
+  return Array.from(document.querySelectorAll(".garment-card[data-garment-id]"));
+}
+
+function getWardrobeListRows() {
+  return Array.from(document.querySelectorAll(".wardrobe-list-row"));
+}
+
+function getWardrobeFilterLabel(type) {
+  if (type === "top") {
+    return "上装";
+  }
+
+  if (type === "bottom") {
+    return "下装";
+  }
+
+  if (type === "outer") {
+    return "外套";
+  }
+
+  if (type === "accessory") {
+    return "鞋包配饰";
+  }
+
+  return "全部";
+}
+
+function ensureAddViewNavigation() {
+  const sidebarNav = document.querySelector(".sidebar-nav");
+  const outfitLink = sidebarNav?.querySelector('[data-view-link="outfit"]');
+
+  if (!sidebarNav || sidebarNav.querySelector('[data-view-link="add"]')) {
+    return;
+  }
+
+  const link = document.createElement("a");
+  link.href = "#add";
+  link.dataset.viewLink = "add";
+  link.innerHTML = `
+    <span class="menu-mini">＋</span>
+    <span class="menu-full">新增</span>
+  `;
+
+  if (outfitLink) {
+    sidebarNav.insertBefore(link, outfitLink);
+  } else {
+    sidebarNav.appendChild(link);
+  }
+}
+
+function ensureAddViewPage() {
+  const mainContent = document.querySelector(".main-content");
+  const storageView = document.querySelector('.page-view[data-view="storage"]');
+
+  if (!mainContent || document.querySelector('.page-view[data-view="add"]')) {
+    return;
+  }
+
+  const section = document.createElement("section");
+  section.className = "page-view";
+  section.dataset.view = "add";
+  section.setAttribute("aria-hidden", "true");
+  section.innerHTML = `
+    <header class="page-hero compact-hero">
+      <div class="page-hero-copy compact-copy">
+        <div class="title-pair page-title-pair">
+          <h2>新增你的衣物</h2>
+          <p class="eyebrow">新增 / Add</p>
+        </div>
+        <p class="hero-text">上传原图，生成标准归档图，并直接加入主衣柜。</p>
+      </div>
+    </header>
+
+    <section class="glass-panel simple-panel">
+      <section class="embedded-intake-panel add-view-panel">
+        <iframe
+          class="embedded-intake-frame add-view-frame"
+          title="衣物 AI 标准化处理台"
+          src="./studio/intake-studio.html?embed=1"
+        ></iframe>
+      </section>
+    </section>
+  `;
+
+  if (storageView) {
+    mainContent.insertBefore(section, storageView);
+  } else {
+    mainContent.appendChild(section);
+  }
+}
 
 function setText(target, value) {
   if (target) {
@@ -186,14 +298,15 @@ function applySidebar(view) {
 function applyView(view) {
   const resolvedView = viewConfig[view] ? view : "home";
   currentView = resolvedView;
+  document.body.classList.toggle("add-view-active", resolvedView === "add");
 
-  viewPanels.forEach((panel) => {
+  document.querySelectorAll(".page-view").forEach((panel) => {
     const isActive = panel.dataset.view === resolvedView;
     panel.classList.toggle("is-active", isActive);
     panel.setAttribute("aria-hidden", String(!isActive));
   });
 
-  navLinks.forEach((link) => {
+  document.querySelectorAll(".sidebar-nav [data-view-link]").forEach((link) => {
     const isActive = link.dataset.viewLink === resolvedView;
     link.classList.toggle("active-nav", isActive);
 
@@ -206,6 +319,472 @@ function applyView(view) {
 
   applySidebar(resolvedView);
   resetScrollPosition();
+}
+
+function bindAddViewLink() {
+  const addLink = document.querySelector('.sidebar-nav [data-view-link="add"]');
+
+  if (!addLink || addLink.dataset.bound === "true") {
+    return;
+  }
+
+  addLink.dataset.bound = "true";
+  addLink.addEventListener("click", (event) => {
+    event.preventDefault();
+
+    if (window.location.hash === "#add") {
+      applyView("add");
+      return;
+    }
+
+    window.location.hash = "add";
+  });
+}
+
+function normalizeWardrobeToolbar() {
+  const wardrobeHead = document.querySelector(".wardrobe-list-head");
+  const tabRow = document.querySelector(".shop-tab-row");
+  const existingActions = wardrobeHead?.querySelector(".wardrobe-list-actions");
+  const stateRow = existingActions?.querySelector(".wardrobe-state-row");
+  const summaryStrip = document.querySelector(".wardrobe-summary-strip");
+
+  if (!tabRow) {
+    return;
+  }
+
+  stateRow?.remove();
+
+  if (!tabRow.querySelector(".shop-tab-group")) {
+    const tabGroup = document.createElement("div");
+    tabGroup.className = "shop-tab-group";
+    tabGroup.dataset.toggleGroup = "";
+    tabGroup.dataset.wardrobeFilterGroup = "";
+
+    Array.from(tabRow.querySelectorAll(".shop-tab")).forEach((button) => {
+      tabGroup.appendChild(button);
+    });
+
+    tabRow.removeAttribute("data-toggle-group");
+    tabRow.removeAttribute("data-wardrobe-filter-group");
+    tabRow.prepend(tabGroup);
+  }
+
+  if (existingActions && !tabRow.querySelector(".shop-tab-tools")) {
+    existingActions.classList.add("shop-tab-tools");
+    tabRow.appendChild(existingActions);
+  }
+
+  if (existingActions && !existingActions.querySelector("[data-toggle-wardrobe-view]")) {
+    const addButton = existingActions.querySelector("[data-open-add-modal]");
+    const viewButton = document.createElement("button");
+    viewButton.type = "button";
+    viewButton.className = "secondary-button inline-button wardrobe-view-toggle";
+    viewButton.dataset.toggleWardrobeView = "";
+
+    if (addButton) {
+      existingActions.insertBefore(viewButton, addButton);
+    } else {
+      existingActions.appendChild(viewButton);
+    }
+  }
+
+  wardrobeHead?.remove();
+  summaryStrip?.remove();
+  toggleGroups = document.querySelectorAll("[data-toggle-group]");
+}
+
+function ensureWardrobeListEditor() {
+  if (!wardrobeGrid) {
+    return null;
+  }
+
+  let editor = document.querySelector("#wardrobe-list-editor");
+
+  if (!editor) {
+    editor = document.createElement("section");
+    editor.id = "wardrobe-list-editor";
+    editor.className = "wardrobe-editor-list";
+    wardrobeGrid.insertAdjacentElement("afterend", editor);
+  }
+
+  return editor;
+}
+
+function getTypeLabel(type) {
+  if (type === "bottom") {
+    return "下装";
+  }
+
+  if (type === "outer") {
+    return "外套";
+  }
+
+  if (type === "accessory") {
+    return "鞋包配饰";
+  }
+
+  return "上装";
+}
+
+function getStateLabel(state) {
+  if (state === "active") {
+    return "当季外放";
+  }
+
+  if (state === "frequent") {
+    return "常穿";
+  }
+
+  return "待整理";
+}
+
+function normalizeCustomGarment(item) {
+  const normalized = item && typeof item === "object" ? item : {};
+
+  return {
+    id: normalized.id || `garment-${Date.now()}`,
+    type: normalized.type || "top",
+    state: normalized.state || "pending",
+    name: normalized.name || "未命名衣物",
+    categoryText: normalized.categoryText || "AI 导入",
+    location: normalized.location || "待整理",
+    seasons: normalized.seasons || normalized.season || "待确认",
+    frequency: normalized.frequency || "新加入",
+    lastWorn: normalized.lastWorn || "未穿过",
+    note: normalized.note || "",
+    status: normalized.status || "待整理",
+    footer: normalized.footer || "AI 标准图",
+    imageUrl: normalized.imageUrl || "",
+    imageDataUrl: normalized.imageDataUrl || "",
+    color: normalized.color || "",
+    purchaseDate: normalized.purchaseDate || "",
+    price: normalized.price || "",
+    brand: normalized.brand || ""
+  };
+}
+
+function buildWardrobeEditorField(label, field, value, options = {}) {
+  const { type = "text", rows = 0, fieldClass = "" } = options;
+
+  if (type === "textarea") {
+    return `
+      <label class="wardrobe-editor-field ${fieldClass}">
+        <span>${label}</span>
+        <textarea data-field="${field}" rows="${rows || 3}">${escapeHtml(value || "")}</textarea>
+      </label>
+    `;
+  }
+
+  if (type === "select") {
+    const selectOptions = (options.options || [])
+      .map((option) => {
+        const selected = String(option.value) === String(value) ? " selected" : "";
+        return `<option value="${escapeHtml(option.value)}"${selected}>${escapeHtml(option.label)}</option>`;
+      })
+      .join("");
+
+    return `
+      <label class="wardrobe-editor-field ${fieldClass}">
+        <span>${label}</span>
+        <select data-field="${field}">
+          ${selectOptions}
+        </select>
+      </label>
+    `;
+  }
+
+  return `
+    <label class="wardrobe-editor-field ${fieldClass}">
+      <span>${label}</span>
+      <input data-field="${field}" type="${type}" value="${escapeHtml(value || "")}">
+    </label>
+  `;
+}
+
+function buildWardrobeListRowMarkup(item, index) {
+  const summary = [getTypeLabel(item.type), item.location || "待整理"].filter(Boolean).join(" / ");
+
+  return `
+    <article
+      class="wardrobe-list-row"
+      data-garment-id="${escapeHtml(item.id)}"
+      data-garment-type="${escapeHtml(item.type)}"
+      data-garment-state="${escapeHtml(item.state)}"
+      data-garment-name="${escapeHtml(item.name)}"
+      data-garment-category="${escapeHtml(item.categoryText)}"
+      data-garment-location="${escapeHtml(item.location)}"
+      data-garment-seasons="${escapeHtml(item.seasons)}"
+      data-garment-status="${escapeHtml(item.status)}"
+      data-garment-color="${escapeHtml(item.color)}"
+      data-garment-brand="${escapeHtml(item.brand)}"
+      data-garment-price="${escapeHtml(item.price)}"
+    >
+      <div class="wardrobe-list-row-head">
+        <div class="wardrobe-list-row-title">
+          <strong>${escapeHtml(item.name || `衣物 ${index + 1}`)}</strong>
+          <span>${escapeHtml(summary)}</span>
+        </div>
+        <button class="ghost-button inline-button wardrobe-delete-button" type="button" data-delete-garment="${escapeHtml(item.id)}">删除衣物</button>
+      </div>
+
+      <div class="wardrobe-list-fields">
+        ${buildWardrobeEditorField("衣物名称", "name", item.name)}
+        ${buildWardrobeEditorField("衣物类型", "type", item.type, {
+          type: "select",
+          options: [
+            { value: "top", label: "上装" },
+            { value: "bottom", label: "下装" },
+            { value: "outer", label: "外套" },
+            { value: "accessory", label: "鞋包配饰" }
+          ]
+        })}
+        ${buildWardrobeEditorField("衣柜状态", "state", item.state, {
+          type: "select",
+          options: [
+            { value: "pending", label: "待整理" },
+            { value: "active", label: "当季外放" },
+            { value: "frequent", label: "常穿" }
+          ]
+        })}
+        ${buildWardrobeEditorField("收纳位置", "location", item.location)}
+        ${buildWardrobeEditorField("颜色标签", "color", item.color)}
+        ${buildWardrobeEditorField("季节标签", "seasons", item.seasons)}
+        ${buildWardrobeEditorField("购入时间", "purchaseDate", item.purchaseDate, { type: "date" })}
+        ${buildWardrobeEditorField("价格", "price", item.price)}
+        ${buildWardrobeEditorField("品牌备注", "brand", item.brand)}
+        ${buildWardrobeEditorField("分类说明", "categoryText", item.categoryText)}
+        ${buildWardrobeEditorField("状态标签", "status", item.status)}
+        ${buildWardrobeEditorField("穿着频率", "frequency", item.frequency)}
+        ${buildWardrobeEditorField("最近穿着", "lastWorn", item.lastWorn)}
+        ${buildWardrobeEditorField("卡片短标签", "footer", item.footer)}
+        ${buildWardrobeEditorField("备注", "note", item.note, { type: "textarea", rows: 3, fieldClass: "is-wide" })}
+      </div>
+    </article>
+  `;
+}
+
+function renderWardrobeListEditor() {
+  const editor = ensureWardrobeListEditor();
+
+  if (!editor) {
+    return;
+  }
+
+  const items = loadCustomGarments();
+
+  if (!items.length) {
+    editor.innerHTML = `
+      <div class="wardrobe-list-empty">
+        <strong>还没有可编辑的衣物</strong>
+        <span>先去“新增”页生成并加入几件衣物，再切回列表模式编辑。</span>
+      </div>
+    `;
+    return;
+  }
+
+  editor.innerHTML = items.map((item, index) => buildWardrobeListRowMarkup(item, index)).join("");
+}
+
+function buildWardrobeTableControl(field, value, options = {}) {
+  const { type = "text" } = options;
+
+  if (type === "select") {
+    const selectOptions = (options.options || [])
+      .map((option) => {
+        const selected = String(option.value) === String(value) ? " selected" : "";
+        return `<option value="${escapeHtml(option.value)}"${selected}>${escapeHtml(option.label)}</option>`;
+      })
+      .join("");
+
+    return `<select data-field="${field}">${selectOptions}</select>`;
+  }
+
+  return `<input data-field="${field}" type="${type}" value="${escapeHtml(value || "")}">`;
+}
+
+function buildWardrobeListRowMarkup(item) {
+  return `
+    <tr
+      class="wardrobe-list-row"
+      data-garment-id="${escapeHtml(item.id)}"
+      data-garment-type="${escapeHtml(item.type)}"
+      data-garment-state="${escapeHtml(item.state)}"
+      data-garment-name="${escapeHtml(item.name)}"
+      data-garment-category="${escapeHtml(item.categoryText)}"
+      data-garment-location="${escapeHtml(item.location)}"
+      data-garment-seasons="${escapeHtml(item.seasons)}"
+      data-garment-status="${escapeHtml(item.status)}"
+      data-garment-color="${escapeHtml(item.color)}"
+      data-garment-brand="${escapeHtml(item.brand)}"
+      data-garment-price="${escapeHtml(item.price)}"
+    >
+      <td class="cell-name">${buildWardrobeTableControl("name", item.name)}</td>
+      <td>${buildWardrobeTableControl("type", item.type, {
+        type: "select",
+        options: [
+          { value: "top", label: "上装" },
+          { value: "bottom", label: "下装" },
+          { value: "outer", label: "外套" },
+          { value: "accessory", label: "鞋包配饰" }
+        ]
+      })}</td>
+      <td>${buildWardrobeTableControl("state", item.state, {
+        type: "select",
+        options: [
+          { value: "pending", label: "待整理" },
+          { value: "active", label: "当季外放" },
+          { value: "frequent", label: "常穿" }
+        ]
+      })}</td>
+      <td>${buildWardrobeTableControl("location", item.location)}</td>
+      <td>${buildWardrobeTableControl("color", item.color)}</td>
+      <td>${buildWardrobeTableControl("seasons", item.seasons)}</td>
+      <td>${buildWardrobeTableControl("purchaseDate", item.purchaseDate, { type: "date" })}</td>
+      <td>${buildWardrobeTableControl("price", item.price)}</td>
+      <td>${buildWardrobeTableControl("brand", item.brand)}</td>
+      <td>${buildWardrobeTableControl("categoryText", item.categoryText)}</td>
+      <td>${buildWardrobeTableControl("status", item.status)}</td>
+      <td>${buildWardrobeTableControl("frequency", item.frequency)}</td>
+      <td>${buildWardrobeTableControl("lastWorn", item.lastWorn)}</td>
+      <td>${buildWardrobeTableControl("footer", item.footer)}</td>
+      <td class="cell-note">${buildWardrobeTableControl("note", item.note)}</td>
+      <td class="cell-action">
+        <button class="ghost-button inline-button wardrobe-delete-button" type="button" data-delete-garment="${escapeHtml(item.id)}">删除</button>
+      </td>
+    </tr>
+  `;
+}
+
+function renderWardrobeListEditor() {
+  const editor = ensureWardrobeListEditor();
+
+  if (!editor) {
+    return;
+  }
+
+  const items = loadCustomGarments();
+
+  if (!items.length) {
+    editor.innerHTML = `
+      <div class="wardrobe-list-empty">
+        <strong>还没有可编辑的衣物</strong>
+        <span>先去“新增”页生成并加入几件衣物，再切回列表模式编辑。</span>
+      </div>
+    `;
+    return;
+  }
+
+  editor.innerHTML = `
+    <div class="wardrobe-editor-table-shell">
+      <table class="wardrobe-editor-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>类型</th>
+            <th>状态</th>
+            <th>位置</th>
+            <th>颜色</th>
+            <th>季节</th>
+            <th>购入时间</th>
+            <th>价格</th>
+            <th>品牌</th>
+            <th>分类说明</th>
+            <th>状态标签</th>
+            <th>频率</th>
+            <th>最近穿着</th>
+            <th>卡片标签</th>
+            <th>备注</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => buildWardrobeListRowMarkup(item)).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderWardrobeListEditor() {
+  const editor = ensureWardrobeListEditor();
+
+  if (!editor) {
+    return;
+  }
+
+  const items = loadCustomGarments();
+
+  if (!items.length) {
+    editor.innerHTML = `
+      <div class="wardrobe-list-empty">
+        <strong>还没有可编辑的衣物</strong>
+        <span>先去“新增”页生成并加入几件衣物，再切回列表模式编辑。</span>
+      </div>
+    `;
+    return;
+  }
+
+  editor.innerHTML = `
+    <div class="wardrobe-editor-table-shell">
+      <table class="wardrobe-editor-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>类型</th>
+            <th>状态</th>
+            <th>位置</th>
+            <th>颜色</th>
+            <th>季节</th>
+            <th>购入时间</th>
+            <th>价格</th>
+            <th>品牌</th>
+            <th>分类说明</th>
+            <th>状态标签</th>
+            <th>频率</th>
+            <th>最近穿着</th>
+            <th>卡片标签</th>
+            <th>备注</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => buildWardrobeListRowMarkup(item)).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function syncWardrobeViewToggle() {
+  const button = document.querySelector("[data-toggle-wardrobe-view]");
+
+  if (!button) {
+    return;
+  }
+
+  button.textContent = currentWardrobeView === "list" ? "切换视图 · 看板" : "切换视图 · 列表";
+}
+
+function applyWardrobeViewMode() {
+  const editor = ensureWardrobeListEditor();
+
+  if (wardrobeGrid) {
+    wardrobeGrid.hidden = currentWardrobeView !== "board";
+  }
+
+  if (editor) {
+    editor.hidden = currentWardrobeView !== "list";
+  }
+
+  document.body.classList.toggle("wardrobe-list-view-active", currentWardrobeView === "list");
+  syncWardrobeViewToggle();
+}
+
+function toggleWardrobeViewMode() {
+  currentWardrobeView = currentWardrobeView === "list" ? "board" : "list";
+  window.localStorage.setItem(WARDROBE_VIEW_KEY, currentWardrobeView);
+  applyWardrobeViewMode();
+  filterWardrobeCards();
 }
 
 function getViewFromHash() {
@@ -254,31 +833,43 @@ function updateStorageProgress() {
 }
 
 function getGarmentById(id) {
-  return Array.from(garmentCards).find((card) => card.dataset.garmentId === id);
+  return getGarmentCards().find((card) => card.dataset.garmentId === id);
+}
+
+function matchesWardrobeFilters(node, keyword) {
+  const typeMatch = currentWardrobeFilter === "all" || node.dataset.garmentType === currentWardrobeFilter;
+  const stateMatch = currentWardrobeState === "all" || node.dataset.garmentState === currentWardrobeState;
+  const searchableText = [
+    node.dataset.garmentName,
+    node.dataset.garmentCategory,
+    node.dataset.garmentLocation,
+    node.dataset.garmentStatus,
+    node.dataset.garmentSeasons,
+    node.dataset.garmentColor,
+    node.dataset.garmentBrand,
+    node.dataset.garmentPrice
+  ].join(" ").toLowerCase();
+  const keywordMatch = keyword === "" || searchableText.includes(keyword);
+
+  return typeMatch && stateMatch && keywordMatch;
 }
 
 function filterWardrobeCards() {
   const keyword = wardrobeSearchInput ? wardrobeSearchInput.value.trim().toLowerCase() : "";
   let firstVisibleCard = null;
 
-  garmentCards.forEach((card) => {
-    const typeMatch = currentWardrobeFilter === "all" || card.dataset.garmentType === currentWardrobeFilter;
-    const stateMatch = currentWardrobeState === "all" || card.dataset.garmentState === currentWardrobeState;
-    const searchableText = [
-      card.dataset.garmentName,
-      card.dataset.garmentCategory,
-      card.dataset.garmentLocation,
-      card.dataset.garmentStatus,
-      card.dataset.garmentSeasons
-    ].join(" ").toLowerCase();
-    const keywordMatch = keyword === "" || searchableText.includes(keyword);
-    const isVisible = typeMatch && stateMatch && keywordMatch;
+  getGarmentCards().forEach((card) => {
+    const isVisible = matchesWardrobeFilters(card, keyword);
 
     card.hidden = !isVisible;
 
     if (isVisible && !firstVisibleCard) {
       firstVisibleCard = card;
     }
+  });
+
+  getWardrobeListRows().forEach((row) => {
+    row.hidden = !matchesWardrobeFilters(row, keyword);
   });
 
   const activeVisibleCard = document.querySelector(".garment-card.active-card:not([hidden])");
@@ -303,6 +894,41 @@ function openAddGarmentModal(trigger = null) {
   addGarmentCloseButton?.focus();
 }
 
+function syncEmbeddedIntakeState() {
+  const toggleButtons = document.querySelectorAll("[data-toggle-ai-intake]");
+
+  toggleButtons.forEach((button) => {
+    button.textContent = isEmbeddedIntakeOpen ? "收起 AI 处理台" : "打开 AI 处理台";
+  });
+
+  if (embeddedIntakePanel) {
+    embeddedIntakePanel.hidden = !isEmbeddedIntakeOpen;
+  }
+}
+
+function openEmbeddedIntake() {
+  isEmbeddedIntakeOpen = true;
+  syncEmbeddedIntakeState();
+
+  if (embeddedIntakeFrame instanceof HTMLIFrameElement && embeddedIntakeFrame.src) {
+    embeddedIntakeFrame.focus();
+  }
+}
+
+function closeEmbeddedIntake() {
+  isEmbeddedIntakeOpen = false;
+  syncEmbeddedIntakeState();
+}
+
+function toggleEmbeddedIntake() {
+  if (isEmbeddedIntakeOpen) {
+    closeEmbeddedIntake();
+    return;
+  }
+
+  openEmbeddedIntake();
+}
+
 function closeAddGarmentModal() {
   if (!addGarmentModal) {
     return;
@@ -314,6 +940,7 @@ function closeAddGarmentModal() {
   addGarmentModal.hidden = true;
   addGarmentModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+  closeEmbeddedIntake();
   lastAddGarmentTrigger = null;
 
   if (restoreFocusTarget instanceof HTMLElement) {
@@ -328,8 +955,11 @@ function selectGarment(id) {
     return;
   }
 
-  garmentCards.forEach((item) => item.classList.remove("active-card"));
+  getGarmentCards().forEach((item) => item.classList.remove("active-card"));
   card.classList.add("active-card");
+  getWardrobeListRows().forEach((row) => {
+    row.classList.toggle("active-list-row", row.dataset.garmentId === id);
+  });
 
   setText(detailName, card.dataset.garmentName);
   setText(detailLocation, card.dataset.garmentLocation);
@@ -342,7 +972,7 @@ function selectGarment(id) {
 }
 
 function buildSearchEntries() {
-  const garmentEntries = Array.from(garmentCards).map((card) => ({
+  const garmentEntries = getGarmentCards().map((card) => ({
     type: "garment",
     id: card.dataset.garmentId,
     view: "wardrobe",
@@ -353,7 +983,10 @@ function buildSearchEntries() {
       card.dataset.garmentCategory,
       card.dataset.garmentLocation,
       card.dataset.garmentStatus,
-      card.dataset.garmentSeasons
+      card.dataset.garmentSeasons,
+      card.dataset.garmentColor,
+      card.dataset.garmentBrand,
+      card.dataset.garmentPrice
     ].join(" ").toLowerCase()
   }));
 
@@ -369,7 +1002,291 @@ function buildSearchEntries() {
   return [...viewEntries, ...garmentEntries];
 }
 
-const searchEntries = buildSearchEntries();
+function refreshSearchEntries() {
+  searchEntries = buildSearchEntries();
+}
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || `garment-${Date.now()}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function getFigureClass(type) {
+  if (type === "bottom") {
+    return "pants-figure";
+  }
+
+  if (type === "outer") {
+    return "jacket-figure";
+  }
+
+  if (type === "accessory") {
+    return "shoe-figure";
+  }
+
+  return "knit-figure";
+}
+
+function loadCustomGarments() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(CUSTOM_GARMENTS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.map(normalizeCustomGarment) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomGarments(items) {
+  window.localStorage.setItem(CUSTOM_GARMENTS_KEY, JSON.stringify(items.map(normalizeCustomGarment)));
+}
+
+function buildCustomGarmentCardMarkup(item) {
+  const ribbon = escapeHtml(item.location || "待整理");
+  const name = escapeHtml(item.name || "未命名衣物");
+  const category = escapeHtml(item.categoryText || "AI 导入");
+  const status = escapeHtml(item.status || "待整理");
+  const footer = escapeHtml(item.footer || "刚加入衣柜");
+  const imageSource = item.imageUrl || item.imageDataUrl || "";
+  const image = imageSource
+    ? `<img class="garment-photo" src="${imageSource}" alt="${name}">`
+    : `<div class="garment-figure ${getFigureClass(item.type)}"></div>`;
+
+  return `
+    <span class="card-ribbon">${ribbon}</span>
+    ${image}
+    <h4>${name}</h4>
+    <p>${category}</p>
+    <div class="garment-footer">
+      <span>${status}</span>
+      <span>${footer}</span>
+    </div>
+  `;
+}
+
+function createCustomGarmentCard(item) {
+  const card = document.createElement("article");
+  card.className = "garment-card custom-garment-card";
+  card.tabIndex = 0;
+  card.dataset.garmentId = item.id;
+  card.dataset.garmentType = item.type;
+  card.dataset.garmentState = item.state;
+  card.dataset.garmentName = item.name;
+  card.dataset.garmentCategory = item.categoryText;
+  card.dataset.garmentLocation = item.location;
+  card.dataset.garmentSeasons = item.seasons;
+  card.dataset.garmentFrequency = item.frequency;
+  card.dataset.garmentLastWorn = item.lastWorn;
+  card.dataset.garmentNote = item.note;
+  card.dataset.garmentStatus = item.status;
+  card.dataset.garmentColor = item.color;
+  card.dataset.garmentBrand = item.brand;
+  card.dataset.garmentPurchaseDate = item.purchaseDate;
+  card.dataset.garmentPrice = item.price;
+  card.innerHTML = buildCustomGarmentCardMarkup(item);
+  return card;
+}
+
+function removePlaceholderGarments() {
+  if (!wardrobeGrid) {
+    return;
+  }
+
+  wardrobeGrid.querySelectorAll('[data-garment-id]:not(.custom-garment-card)').forEach((card) => {
+    card.remove();
+  });
+}
+
+function updateWardrobeSummaryCounts() {
+  const counts = {
+    top: 0,
+    bottom: 0,
+    outer: 0,
+    other: 0
+  };
+
+  getGarmentCards().forEach((card) => {
+    const type = card.dataset.garmentType;
+
+    if (type === "top") {
+      counts.top += 1;
+      return;
+    }
+
+    if (type === "bottom") {
+      counts.bottom += 1;
+      return;
+    }
+
+    if (type === "outer") {
+      counts.outer += 1;
+      return;
+    }
+
+    counts.other += 1;
+  });
+
+  if (wardrobeSummaryCounts[0]) {
+    wardrobeSummaryCounts[0].textContent = String(counts.top);
+  }
+
+  if (wardrobeSummaryCounts[1]) {
+    wardrobeSummaryCounts[1].textContent = String(counts.bottom);
+  }
+
+  if (wardrobeSummaryCounts[2]) {
+    wardrobeSummaryCounts[2].textContent = String(counts.outer);
+  }
+
+  if (wardrobeSummaryCounts[3]) {
+    wardrobeSummaryCounts[3].textContent = String(counts.other);
+  }
+
+  const total = counts.top + counts.bottom + counts.outer + counts.other;
+  const countMap = {
+    all: total,
+    top: counts.top,
+    bottom: counts.bottom,
+    outer: counts.outer,
+    accessory: counts.other
+  };
+
+  document.querySelectorAll("[data-wardrobe-filter]").forEach((button) => {
+    const type = button.dataset.wardrobeFilter || "all";
+    button.textContent = `${getWardrobeFilterLabel(type)}（${countMap[type] ?? 0}）`;
+  });
+}
+
+function syncWardrobeFilterCountLabels() {
+  const counts = {
+    all: 0,
+    top: 0,
+    bottom: 0,
+    outer: 0,
+    accessory: 0
+  };
+
+  getGarmentCards().forEach((card) => {
+    counts.all += 1;
+
+    if (card.dataset.garmentType === "top") {
+      counts.top += 1;
+      return;
+    }
+
+    if (card.dataset.garmentType === "bottom") {
+      counts.bottom += 1;
+      return;
+    }
+
+    if (card.dataset.garmentType === "outer") {
+      counts.outer += 1;
+      return;
+    }
+
+    counts.accessory += 1;
+  });
+
+  const labels = {
+    all: "全部",
+    top: "上装",
+    bottom: "下装",
+    outer: "外套",
+    accessory: "鞋包配饰"
+  };
+
+  document.querySelectorAll("[data-wardrobe-filter]").forEach((button) => {
+    const type = button.dataset.wardrobeFilter || "all";
+    button.textContent = `${labels[type] || labels.all}（${counts[type] ?? 0}）`;
+  });
+}
+
+function renderCustomGarments() {
+  if (!wardrobeGrid) {
+    return;
+  }
+
+  removePlaceholderGarments();
+
+  wardrobeGrid.querySelectorAll(".custom-garment-card").forEach((card) => {
+    card.remove();
+  });
+
+  loadCustomGarments().forEach((item) => {
+    wardrobeGrid.prepend(createCustomGarmentCard(item));
+  });
+
+  getGarmentCards().forEach((card) => {
+    card.tabIndex = 0;
+  });
+
+  updateWardrobeSummaryCounts();
+  syncWardrobeFilterCountLabels();
+  refreshSearchEntries();
+  renderWardrobeListEditor();
+  applyWardrobeViewMode();
+}
+
+function addGarmentToWardrobe(item) {
+  const allItems = loadCustomGarments();
+  const existingIndex = allItems.findIndex((entry) => entry.id === item.id);
+
+  if (existingIndex >= 0) {
+    allItems[existingIndex] = item;
+  } else {
+    allItems.unshift(item);
+  }
+
+  saveCustomGarments(allItems);
+  renderCustomGarments();
+  filterWardrobeCards();
+  selectGarment(item.id);
+}
+
+function updateGarmentInWardrobe(id, field, value) {
+  const allItems = loadCustomGarments();
+  const itemIndex = allItems.findIndex((entry) => entry.id === id);
+
+  if (itemIndex < 0) {
+    return;
+  }
+
+  allItems[itemIndex] = normalizeCustomGarment({
+    ...allItems[itemIndex],
+    [field]: value
+  });
+
+  saveCustomGarments(allItems);
+  renderCustomGarments();
+  filterWardrobeCards();
+  selectGarment(id);
+}
+
+function removeGarmentFromWardrobe(id) {
+  const remainingItems = loadCustomGarments().filter((entry) => entry.id !== id);
+  saveCustomGarments(remainingItems);
+  renderCustomGarments();
+  filterWardrobeCards();
+
+  const nextItem = remainingItems[0];
+  if (nextItem) {
+    selectGarment(nextItem.id);
+  }
+}
+
+removePlaceholderGarments();
+let searchEntries = buildSearchEntries();
 
 function renderSearchResults(query) {
   if (!globalSearchResults) {
@@ -446,19 +1363,85 @@ seasonButtons.forEach((button) => {
   });
 });
 
-garmentCards.forEach((card) => {
-  card.tabIndex = 0;
+if (wardrobeGrid) {
+  wardrobeGrid.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-garment-id]");
 
-  card.addEventListener("click", () => {
+    if (!card) {
+      return;
+    }
+
     selectGarment(card.dataset.garmentId);
   });
 
-  card.addEventListener("keydown", (event) => {
+  wardrobeGrid.addEventListener("keydown", (event) => {
+    const card = event.target.closest("[data-garment-id]");
+
+    if (!card) {
+      return;
+    }
+
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       selectGarment(card.dataset.garmentId);
     }
   });
+}
+
+normalizeWardrobeToolbar();
+const wardrobeListEditor = ensureWardrobeListEditor();
+const wardrobeFilterGroup = document.querySelector("[data-wardrobe-filter-group]");
+
+if (wardrobeListEditor) {
+  wardrobeListEditor.addEventListener("focusin", (event) => {
+    const row = event.target.closest(".wardrobe-list-row");
+
+    if (!row) {
+      return;
+    }
+
+    selectGarment(row.dataset.garmentId);
+  });
+
+  wardrobeListEditor.addEventListener("change", (event) => {
+    const control = event.target.closest("[data-field]");
+    const row = event.target.closest(".wardrobe-list-row");
+
+    if (!control || !row) {
+      return;
+    }
+
+    updateGarmentInWardrobe(row.dataset.garmentId, control.dataset.field, control.value.trim());
+  });
+
+  wardrobeListEditor.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("[data-delete-garment]");
+    const row = event.target.closest(".wardrobe-list-row");
+
+    if (deleteButton) {
+      removeGarmentFromWardrobe(deleteButton.dataset.deleteGarment);
+      return;
+    }
+
+    if (row) {
+      selectGarment(row.dataset.garmentId);
+    }
+  });
+}
+
+document.querySelector("[data-toggle-wardrobe-view]")?.addEventListener("click", () => {
+  toggleWardrobeViewMode();
+});
+
+wardrobeFilterGroup?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-wardrobe-filter]");
+
+  if (!button) {
+    return;
+  }
+
+  currentWardrobeFilter = button.dataset.wardrobeFilter || "all";
+  filterWardrobeCards();
 });
 
 toggleGroups.forEach((group) => {
@@ -556,6 +1539,50 @@ if (globalSearchResults) {
   });
 }
 
+window.addEventListener("message", (event) => {
+  const payload = event.data;
+
+  if (!payload || payload.type !== "ai-intake:add-garment") {
+    return;
+  }
+
+  const garmentName = payload.garmentName || "AI 新增衣物";
+  const category = payload.category || "top";
+  const location = payload.location || "待整理";
+  const seasons = payload.season || "待确认";
+  const color = payload.color || "待确认";
+  const note = payload.note || "由 AI 处理台导入";
+  const purchaseDate = payload.purchaseDate || "";
+  const price = payload.price || "";
+  const brand = payload.brand || "";
+  const imageUrl = payload.imageUrl || "";
+  const id = `${slugify(garmentName)}-${Date.now()}`;
+
+  addGarmentToWardrobe({
+    id,
+    type: category,
+    state: "pending",
+    name: garmentName,
+    categoryText: `${color} / ${seasons} / AI 导入`,
+    location,
+    seasons,
+    frequency: "新加入",
+    lastWorn: "未穿过",
+    note,
+    status: "待整理",
+    footer: "AI 标准图",
+    imageUrl,
+    color,
+    purchaseDate,
+    price,
+    brand
+  });
+
+  applyView("wardrobe");
+  window.location.hash = "wardrobe";
+  closeAddGarmentModal();
+});
+
 document.addEventListener("click", (event) => {
   const target = event.target;
 
@@ -566,7 +1593,18 @@ document.addEventListener("click", (event) => {
   const openModalTrigger = target.closest("[data-open-add-modal]");
   if (openModalTrigger) {
     event.preventDefault();
-    openAddGarmentModal(openModalTrigger);
+    if (window.location.hash === "#add") {
+      applyView("add");
+    } else {
+      window.location.hash = "add";
+    }
+    return;
+  }
+
+  const toggleAiTrigger = target.closest("[data-toggle-ai-intake]");
+  if (toggleAiTrigger) {
+    event.preventDefault();
+    toggleEmbeddedIntake();
     return;
   }
 
@@ -612,8 +1650,12 @@ window.addEventListener("pageshow", () => {
   resetScrollPosition();
 });
 
+ensureAddViewNavigation();
+ensureAddViewPage();
+bindAddViewLink();
 applyView(getViewFromHash());
 applySeason("spring");
-selectGarment("oxford-blue-shirt");
+renderCustomGarments();
 filterWardrobeCards();
 updateStorageProgress();
+syncEmbeddedIntakeState();

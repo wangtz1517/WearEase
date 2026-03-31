@@ -4,9 +4,24 @@ import path from "node:path";
 import { config } from "./config.js";
 import { ensureStorage, loadJob } from "./job-store.js";
 import { MockProvider } from "./providers/mock-provider.js";
+import { SeedreamProvider } from "./providers/seedream-provider.js";
 import { createJob } from "./services/intake-pipeline.js";
 
-const provider = new MockProvider();
+function createProvider() {
+  if (config.provider === "seedream") {
+    return new SeedreamProvider({
+      apiKey: config.volcengineApiKey,
+      baseUrl: config.volcengineBaseUrl,
+      model: config.volcengineImageModel
+    });
+  }
+
+  return new MockProvider();
+}
+
+const provider = createProvider();
+
+const allowedImageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"]);
 
 function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
@@ -52,6 +67,31 @@ async function serveArtifact(response, filePath) {
   }
 }
 
+async function listTestSourceAssets() {
+  const entries = await fs.readdir(config.testSourceDir, { withFileTypes: true });
+
+  return entries
+    .filter((entry) => entry.isFile() && allowedImageExtensions.has(path.extname(entry.name).toLowerCase()))
+    .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
+    .map((entry, index) => ({
+      id: `source_${index + 1}`,
+      name: entry.name,
+      url: `/api/test-assets/source/${encodeURIComponent(entry.name)}`
+    }));
+}
+
+function resolveSafeTestSourcePath(filename) {
+  const decoded = decodeURIComponent(filename);
+  const fullPath = path.resolve(config.testSourceDir, decoded);
+  const relative = path.relative(config.testSourceDir, fullPath);
+
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return null;
+  }
+
+  return fullPath;
+}
+
 async function handleRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
   const pathname = url.pathname;
@@ -69,6 +109,29 @@ async function handleRequest(request, response) {
       provider: provider.name,
       port: config.port
     });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/test-assets/source") {
+    try {
+      const items = await listTestSourceAssets();
+      sendJson(response, 200, { items });
+    } catch (error) {
+      sendJson(response, 500, { error: "Failed to list test assets." });
+    }
+    return;
+  }
+
+  const testAssetMatch = pathname.match(/^\/api\/test-assets\/source\/(.+)$/);
+  if (request.method === "GET" && testAssetMatch) {
+    const safePath = resolveSafeTestSourcePath(testAssetMatch[1]);
+
+    if (!safePath) {
+      sendJson(response, 400, { error: "Invalid asset path." });
+      return;
+    }
+
+    await serveArtifact(response, safePath);
     return;
   }
 
