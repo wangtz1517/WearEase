@@ -1,6 +1,7 @@
 ai-intake-service/storage/
 ai-intake-service/.env
 supabase/functions/.env
+supabase/.temp/
 node_modules/
 assets/ai-test/
 dist-pages/
