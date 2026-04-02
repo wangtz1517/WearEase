@@ -2760,51 +2760,51 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
 .outfit-selector-rows {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .outfit-slot-row {
   display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 251, 246, 0.92), rgba(248, 241, 232, 0.84));
-  border: 1px solid rgba(71, 46, 29, 0.08);
+  gap: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
 }
 
 .outfit-slot-head {
   display: flex;
   justify-content: space-between;
-  align-items: start;
-  gap: 14px;
+  align-items: center;
+  gap: 10px;
 }
 
 .outfit-slot-copy {
   display: flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 24px;
 }
 
 .outfit-slot-copy h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.96rem;
 }
 
 .outfit-slot-count {
   flex: 0 0 auto;
   align-self: center;
-  padding: 5px 10px;
+  padding: 4px 8px;
   border-radius: 999px;
   background: rgba(79, 64, 53, 0.06);
   color: var(--ink-soft);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
 }
 
 .outfit-slot-scroll {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: stretch;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
