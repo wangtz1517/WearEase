@@ -2671,10 +2671,6 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
   gap: 16px;
 }
 
-.scenario-panel {
-  padding: 24px;
-}
-
 .lookboard-grid,
 .capacity-grid {
   display: grid;
@@ -2728,8 +2724,8 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
 .outfit-studio-panel {
   display: grid;
-  gap: 18px;
-  padding: 24px;
+  gap: 14px;
+  padding: 18px 22px 20px;
 }
 
 .outfit-studio-head {
@@ -2746,7 +2742,43 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 .outfit-studio-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
-  gap: 18px;
+  gap: 14px;
+}
+
+.outfit-builder-toolbar {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(71, 46, 29, 0.08);
+}
+
+.outfit-builder-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.outfit-current-season {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.outfit-builder-controls {
+  display: grid;
+  gap: 12px;
+}
+
+.outfit-season-block,
+.outfit-scene-block {
+  display: grid;
+  gap: 8px;
+}
+
+.outfit-season-switcher {
+  justify-content: flex-start;
 }
 
 .outfit-selector-panel,
@@ -2757,12 +2789,6 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
 .outfit-selector-panel {
   min-width: 0;
-}
-
-.outfit-selector-note {
-  margin: 0;
-  color: var(--ink-soft);
-  line-height: 1.7;
 }
 
 .outfit-selector-rows {
@@ -3160,6 +3186,18 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
   font-size: inherit;
 }
 
+.page-view[data-view="outfit"] {
+  gap: 8px;
+}
+
+.page-view[data-view="outfit"] .page-hero {
+  gap: 8px;
+}
+
+.page-view[data-view="outfit"] .page-hero-copy {
+  padding-block: 4px 8px;
+}
+
 @media (max-width: 1120px) {
   .outfit-studio-layout {
     grid-template-columns: 1fr;
@@ -3172,7 +3210,7 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
 @media (max-width: 860px) {
   .outfit-studio-panel {
-    padding: 20px;
+    padding: 16px 18px 18px;
   }
 
   .outfit-studio-actions {
@@ -3181,6 +3219,10 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
   .outfit-studio-actions .inline-button {
     flex: 1 1 180px;
+  }
+
+  .outfit-builder-meta {
+    align-items: flex-start;
   }
 
   .outfit-slot-head {

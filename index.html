@@ -339,41 +339,13 @@
               <h2>生成你的搭配</h2>
               <p class="eyebrow">穿搭 / Outfit</p>
             </div>
-            <p class="hero-text">保留场景选择和自动搭配，让衣柜直接给出几套能穿的答案。</p>
-
-            <div class="season-switcher" aria-label="切换季节">
-              <button class="season-button active" type="button" data-season="spring">春</button>
-              <button class="season-button" type="button" data-season="summer">夏</button>
-              <button class="season-button" type="button" data-season="autumn">秋</button>
-              <button class="season-button" type="button" data-season="winter">冬</button>
-            </div>
-
-            <p class="season-caption" data-current-season>当前季节：春季</p>
           </div>
         </header>
-
-        <section class="glass-panel scenario-panel simple-panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Scene Generator</p>
-              <h3>场景生成器</h3>
-            </div>
-          </div>
-
-          <div class="scenario-row" data-toggle-group>
-            <button class="chip active" type="button">通勤</button>
-            <button class="chip" type="button">周末</button>
-            <button class="chip" type="button">约会</button>
-            <button class="chip" type="button">旅行</button>
-          </div>
-
-          <p class="season-caption" data-outfit-note>适合春季晨晚温差，通勤时不显厚重。</p>
-        </section>
 
         <section class="glass-panel outfit-studio-panel">
           <div class="section-head outfit-studio-head">
             <div>
-              <p class="eyebrow">Outfit Builder</p>
+              <p class="eyebrow">自动搭配</p>
               <h3>穿搭预览工作台</h3>
             </div>
 
@@ -383,12 +355,37 @@
             </div>
           </div>
 
+          <div class="outfit-builder-toolbar">
+            <div class="outfit-builder-meta">
+              <span class="status-pill">自动搭配</span>
+              <p class="outfit-current-season" data-current-season>当前季节：春季</p>
+            </div>
+
+            <div class="outfit-builder-controls">
+              <section class="outfit-season-block">
+                <p class="eyebrow">春夏秋冬</p>
+                <div class="season-switcher outfit-season-switcher" aria-label="切换季节">
+                  <button class="season-button active" type="button" data-season="spring">春</button>
+                  <button class="season-button" type="button" data-season="summer">夏</button>
+                  <button class="season-button" type="button" data-season="autumn">秋</button>
+                  <button class="season-button" type="button" data-season="winter">冬</button>
+                </div>
+              </section>
+
+              <section class="outfit-scene-block">
+                <p class="eyebrow">场景生成器</p>
+                <div class="scenario-row" data-toggle-group>
+                  <button class="chip active" type="button">通勤</button>
+                  <button class="chip" type="button">周末</button>
+                  <button class="chip" type="button">约会</button>
+                  <button class="chip" type="button">旅行</button>
+                </div>
+              </section>
+            </div>
+          </div>
+
           <div class="outfit-studio-layout">
             <section class="outfit-selector-panel">
-              <p class="outfit-selector-note">
-                从衣柜中按类别挑选单品。每一行都可以左右滑动浏览，先选好，再点击“加载到小人”查看搭配效果。
-              </p>
-
               <div class="outfit-selector-rows" id="outfit-selector-rows"></div>
             </section>
 
