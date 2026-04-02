@@ -138,6 +138,8 @@ const outfitLoadButton = document.querySelector("#outfit-load-button");
 const outfitResetButton = document.querySelector("#outfit-reset-button");
 const outfitPreviewStatus = document.querySelector("#outfit-preview-status");
 const outfitSelectedSummary = document.querySelector("#outfit-selected-summary");
+const outfitPreviewPanel = document.querySelector(".outfit-preview-panel");
+const outfitPreviewRender = document.querySelector("#outfit-preview-render");
 const outfitPreviewLayers = Object.fromEntries(
   Array.from(document.querySelectorAll("[data-outfit-preview-layer]")).map((node) => [node.dataset.outfitPreviewLayer, node])
 );
@@ -160,6 +162,7 @@ const SUPABASE_URL = String(APP_CONFIG.supabaseUrl || "").trim();
 const SUPABASE_ANON_KEY = String(APP_CONFIG.supabaseAnonKey || "").trim();
 const SUPABASE_BUCKET = String(APP_CONFIG.supabaseBucket || "garment-images").trim();
 const SITE_URL = String(APP_CONFIG.siteUrl || "").trim();
+const AI_OUTFIT_FUNCTION_NAME = String(APP_CONFIG.aiOutfitFunctionName || "ai-outfit-preview").trim();
 const SUPABASE_CDN_URLS = [
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
   "https://unpkg.com/@supabase/supabase-js@2"
@@ -259,8 +262,15 @@ const OUTFIT_SEASON_KEYWORDS = {
   autumn: ["秋", "四季"],
   winter: ["冬", "四季"]
 };
+const OUTFIT_REFERENCE_CANVAS_SIZE = 1600;
+const OUTFIT_REFERENCE_GRID_COLUMNS = 2;
+const OUTFIT_REFERENCE_CELL_GAP = 44;
+const OUTFIT_REFERENCE_MARGIN = 84;
+const OUTFIT_GENERATION_TIMEOUT_MS = 120_000;
 let outfitDraftSelection = createEmptyOutfitSelection();
 let outfitAppliedSelection = createEmptyOutfitSelection();
+let isOutfitGenerating = false;
+let outfitGeneratedPreviewUrl = "";
 
 try {
   currentWardrobeView = window.localStorage.getItem(WARDROBE_VIEW_KEY) === "list" ? "list" : "board";
@@ -1360,6 +1370,23 @@ function createEmptyOutfitSelection() {
   }, {});
 }
 
+function drawRoundedRect(context, x, y, width, height, radius) {
+  if (typeof context.roundRect === "function") {
+    context.beginPath();
+    context.roundRect(x, y, width, height, radius);
+    return;
+  }
+
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.arcTo(x + width, y, x + width, y + height, safeRadius);
+  context.arcTo(x + width, y + height, x, y + height, safeRadius);
+  context.arcTo(x, y + height, x, y, safeRadius);
+  context.arcTo(x, y, x + width, y, safeRadius);
+  context.closePath();
+}
+
 function getFigureClass(type) {
   if (type === "bottom") {
     return "pants-figure";
@@ -1378,6 +1405,38 @@ function getFigureClass(type) {
 
 function getOutfitItemPreviewSource(item) {
   return item?.imageUrl || item?.imageDataUrl || "";
+}
+
+function hasOutfitAiConfig() {
+  return hasSupabaseConfig() && Boolean(AI_OUTFIT_FUNCTION_NAME);
+}
+
+function setOutfitGeneratedPreview(url) {
+  outfitGeneratedPreviewUrl = String(url || "").trim();
+
+  if (outfitPreviewRender) {
+    if (outfitGeneratedPreviewUrl) {
+      outfitPreviewRender.hidden = false;
+
+      if (outfitPreviewRender.src !== outfitGeneratedPreviewUrl) {
+        outfitPreviewRender.src = outfitGeneratedPreviewUrl;
+      }
+    } else {
+      outfitPreviewRender.hidden = true;
+      outfitPreviewRender.removeAttribute("src");
+    }
+  }
+
+  outfitPreviewPanel?.classList.toggle("has-ai-render", Boolean(outfitGeneratedPreviewUrl));
+
+  Object.values(outfitPreviewLayers).forEach((layer) => {
+    if (!layer) {
+      return;
+    }
+
+    layer.hidden = true;
+    layer.innerHTML = "";
+  });
 }
 
 function getOutfitItemMetaText(item) {
@@ -1460,6 +1519,172 @@ function getSelectedOutfitItems(selection, groupedItems) {
       item: getOutfitItemById(groupedItems, slot.key, selection[slot.key] || "")
     }))
     .filter((entry) => entry.item);
+}
+
+function getSelectedOutfitGarments(selection = outfitDraftSelection, groupedItems = groupGarmentsByOutfitSlot()) {
+  return getSelectedOutfitItems(selection, groupedItems).map((entry) => entry.item);
+}
+
+function loadImageElement(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+
+    if (/^https?:\/\//i.test(url)) {
+      image.crossOrigin = "anonymous";
+    }
+
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Failed to load outfit reference image: ${url}`));
+    image.src = url;
+  });
+}
+
+async function buildOutfitReferenceBoardDataUrl(items) {
+  const resolvedItems = items.filter((item) => getOutfitItemPreviewSource(item));
+
+  if (!resolvedItems.length) {
+    throw new Error("请先选择至少一件带图片的衣服。");
+  }
+
+  const loadedImages = await Promise.all(
+    resolvedItems.map(async (item) => ({
+      item,
+      image: await loadImageElement(getOutfitItemPreviewSource(item))
+    }))
+  );
+
+  const canvas = document.createElement("canvas");
+  const rows = Math.max(1, Math.ceil(loadedImages.length / OUTFIT_REFERENCE_GRID_COLUMNS));
+  canvas.width = OUTFIT_REFERENCE_CANVAS_SIZE;
+  canvas.height = Math.max(OUTFIT_REFERENCE_CANVAS_SIZE, Math.round(OUTFIT_REFERENCE_CANVAS_SIZE * (0.7 + rows * 0.42)));
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("当前浏览器无法生成穿搭参考图。");
+  }
+
+  context.fillStyle = "#f8f4ee";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const cardWidth = (
+    canvas.width
+    - OUTFIT_REFERENCE_MARGIN * 2
+    - OUTFIT_REFERENCE_CELL_GAP * (OUTFIT_REFERENCE_GRID_COLUMNS - 1)
+  ) / OUTFIT_REFERENCE_GRID_COLUMNS;
+  const cardHeight = Math.min(520, (canvas.height - OUTFIT_REFERENCE_MARGIN * 2 - OUTFIT_REFERENCE_CELL_GAP * Math.max(0, rows - 1)) / rows);
+
+  context.textAlign = "center";
+  context.textBaseline = "top";
+
+  loadedImages.forEach(({ item, image }, index) => {
+    const column = index % OUTFIT_REFERENCE_GRID_COLUMNS;
+    const row = Math.floor(index / OUTFIT_REFERENCE_GRID_COLUMNS);
+    const cardX = OUTFIT_REFERENCE_MARGIN + column * (cardWidth + OUTFIT_REFERENCE_CELL_GAP);
+    const cardY = OUTFIT_REFERENCE_MARGIN + row * (cardHeight + OUTFIT_REFERENCE_CELL_GAP);
+    const innerPadding = 24;
+    const imageBoxHeight = cardHeight - 88;
+    const availableWidth = cardWidth - innerPadding * 2;
+    const availableHeight = imageBoxHeight - innerPadding * 2;
+    const ratio = Math.min(availableWidth / (image.naturalWidth || image.width || 1), availableHeight / (image.naturalHeight || image.height || 1));
+    const drawWidth = Math.max(1, Math.round((image.naturalWidth || image.width || 1) * ratio));
+    const drawHeight = Math.max(1, Math.round((image.naturalHeight || image.height || 1) * ratio));
+    const drawX = cardX + (cardWidth - drawWidth) / 2;
+    const drawY = cardY + 18 + (imageBoxHeight - drawHeight) / 2;
+
+    context.fillStyle = "rgba(255,255,255,0.94)";
+    context.strokeStyle = "rgba(115, 87, 61, 0.14)";
+    context.lineWidth = 3;
+    drawRoundedRect(context, cardX, cardY, cardWidth, cardHeight, 30);
+    context.fill();
+    context.stroke();
+
+    context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+    context.fillStyle = "#4f4035";
+    context.font = "600 30px \"Noto Sans SC\", \"PingFang SC\", sans-serif";
+    context.fillText(item.name || "未命名衣物", cardX + cardWidth / 2, cardY + cardHeight - 58, cardWidth - 26);
+
+    context.fillStyle = "rgba(79, 64, 53, 0.72)";
+    context.font = "400 22px \"Noto Sans SC\", \"PingFang SC\", sans-serif";
+    context.fillText(getTypeLabel(item.type), cardX + cardWidth / 2, cardY + cardHeight - 26, cardWidth - 26);
+  });
+
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+function withTimeout(promise, timeoutMs, timeoutMessage) {
+  let timeoutId = 0;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+}
+
+async function getReadableOutfitErrorMessage(error, fallbackMessage) {
+  let rawMessage = "";
+
+  if (error?.context instanceof Response) {
+    try {
+      const payload = await error.context.clone().json();
+
+      if (payload?.error) {
+        rawMessage = String(payload.error);
+      }
+
+      if (!rawMessage && payload?.message) {
+        rawMessage = String(payload.message);
+      }
+    } catch {
+      try {
+        const text = await error.context.clone().text();
+
+        if (!rawMessage && text) {
+          rawMessage = text;
+        }
+      } catch {
+        // Ignore nested parsing errors and use the fallback below.
+      }
+    }
+  }
+
+  if (!rawMessage && error?.message) {
+    rawMessage = String(error.message);
+  }
+
+  const normalized = rawMessage.trim().toLowerCase();
+
+  if (!rawMessage) {
+    return fallbackMessage;
+  }
+
+  if (
+    normalized.includes("your session is invalid")
+    || normalized.includes("please sign in again")
+    || normalized.includes("auth session missing")
+  ) {
+    return "登录状态已失效，请刷新页面后重新登录再试。";
+  }
+
+  if (normalized.includes("timed out") || rawMessage.includes("超时")) {
+    return "AI 生成试穿图超时了。请先用两三件单品测试，或稍后重试。";
+  }
+
+  if (normalized.includes("failed to load outfit reference image")) {
+    return "有衣服图片暂时无法读取。请先确认衣柜里的图片可以正常显示，再重新生成。";
+  }
+
+  if (normalized.includes("please select")) {
+    return rawMessage;
+  }
+
+  return rawMessage || fallbackMessage;
 }
 
 function buildOutfitOptionVisualMarkup(item, slotKey) {
@@ -1582,16 +1807,23 @@ function renderOutfitPreviewLayer(slotKey, item) {
 
 function syncOutfitActionButtons(groupedItems) {
   const hasAnyGarments = OUTFIT_SLOT_CONFIG.some((slot) => (groupedItems[slot.key] || []).length > 0);
+  const selectedCount = getSelectedOutfitGarments(outfitDraftSelection, groupedItems).length;
   const hasDraftChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
   const hasAnySelection = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] || outfitAppliedSelection[slot.key]);
+  const isAuthenticated = Boolean(currentUser && currentSession?.access_token);
+  const canGenerate = hasAnyGarments && selectedCount > 0 && hasOutfitAiConfig() && isAuthenticated && !isOutfitGenerating;
 
   if (outfitLoadButton) {
-    outfitLoadButton.disabled = !hasAnyGarments || !hasDraftChanges;
-    outfitLoadButton.textContent = !hasAnyGarments ? "加载到小人" : (hasDraftChanges ? "加载到小人" : "已加载当前搭配");
+    outfitLoadButton.disabled = !canGenerate;
+    outfitLoadButton.textContent = isOutfitGenerating
+      ? "AI 正在生成..."
+      : (!hasAnyGarments
+        ? "AI 生成试穿图"
+        : (hasDraftChanges || !outfitGeneratedPreviewUrl ? "AI 生成试穿图" : "重新生成穿搭图"));
   }
 
   if (outfitResetButton) {
-    outfitResetButton.disabled = !hasAnyGarments || !hasAnySelection;
+    outfitResetButton.disabled = (!hasAnyGarments && !outfitGeneratedPreviewUrl) || !hasAnySelection || isOutfitGenerating;
   }
 }
 
@@ -1616,27 +1848,31 @@ function syncOutfitSelectionUi(groupedItems) {
 
 function syncOutfitPreview(groupedItems) {
   const selectedItems = getSelectedOutfitItems(outfitAppliedSelection, groupedItems);
-
-  OUTFIT_SLOT_CONFIG.forEach((slot) => {
-    const item = getOutfitItemById(groupedItems, slot.key, outfitAppliedSelection[slot.key] || "");
-    renderOutfitPreviewLayer(slot.key, item);
-  });
+  const draftItems = getSelectedOutfitItems(outfitDraftSelection, groupedItems);
+  setOutfitGeneratedPreview(outfitGeneratedPreviewUrl);
 
   if (outfitPreviewStatus) {
     const hasDraftChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
+    const draftSelectedCount = getSelectedOutfitGarments(outfitDraftSelection, groupedItems).length;
 
-    if (!selectedItems.length) {
-      outfitPreviewStatus.textContent = "小人当前还是空白状态。先从左侧选择衣服，再点击“加载到小人”。";
+    if (isOutfitGenerating) {
+      outfitPreviewStatus.textContent = `AI 正在根据已选的 ${draftSelectedCount} 件衣服生成试穿图，请稍候...`;
+    } else if (!draftSelectedCount) {
+      outfitPreviewStatus.textContent = "先从左侧选两件或更多衣服，再点击“AI 生成试穿图”。";
+    } else if (!currentUser || !currentSession?.access_token) {
+      outfitPreviewStatus.textContent = "生成 AI 试穿图前，请先登录账号。";
+    } else if (!selectedItems.length || !outfitGeneratedPreviewUrl) {
+      outfitPreviewStatus.textContent = `已选中 ${draftSelectedCount} 件衣服，点击“AI 生成试穿图”开始生成。`;
     } else if (hasDraftChanges) {
-      outfitPreviewStatus.textContent = `当前已加载 ${selectedItems.length} 件单品，左侧还有新的选择尚未应用。`;
+      outfitPreviewStatus.textContent = `当前试穿图基于 ${selectedItems.length} 件单品生成，左侧还有新的选择尚未重新生成。`;
     } else {
-      outfitPreviewStatus.textContent = `当前已加载 ${selectedItems.length} 件单品，可以继续微调后再重新加载。`;
+      outfitPreviewStatus.textContent = `AI 已经生成当前搭配的试穿图。你可以继续换衣服后重新生成。`;
     }
   }
 
   if (outfitSelectedSummary) {
-    outfitSelectedSummary.innerHTML = selectedItems.length
-      ? selectedItems
+    outfitSelectedSummary.innerHTML = draftItems.length
+      ? draftItems
         .map(({ slot, item }) => `
           <span class="outfit-summary-chip">
             <strong>${escapeHtml(slot.label)}</strong>
@@ -1644,7 +1880,7 @@ function syncOutfitPreview(groupedItems) {
           </span>
         `)
         .join("")
-      : `<span class="status-pill muted">还没有加载任何单品</span>`;
+      : `<span class="status-pill muted">还没有选中任何单品</span>`;
   }
 
   syncOutfitActionButtons(groupedItems);
@@ -1662,6 +1898,7 @@ function renderOutfitStudio() {
   outfitAppliedSelection = sanitizeOutfitSelection(outfitAppliedSelection, groupedItems);
 
   if (totalItems === 0) {
+    setOutfitGeneratedPreview("");
     outfitSelectorRows.innerHTML = `
       <div class="outfit-empty-state">
         <strong>衣柜里还没有可搭配的单品</strong>
@@ -1703,19 +1940,100 @@ function setOutfitDraftSelection(slotKey, itemId) {
   selectedCard?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
 }
 
-function applyCurrentOutfitSelection() {
-  outfitAppliedSelection = {
-    ...outfitDraftSelection
-  };
-
+async function generateAiOutfitPreview() {
   const groupedItems = groupGarmentsByOutfitSlot();
-  syncOutfitSelectionUi(groupedItems);
+  const selectedGarments = getSelectedOutfitGarments(outfitDraftSelection, groupedItems);
+
+  if (!selectedGarments.length) {
+    if (outfitPreviewStatus) {
+      outfitPreviewStatus.textContent = "请先从左侧选中要测试的衣服。";
+    }
+    return;
+  }
+
+  if (!hasOutfitAiConfig()) {
+    if (outfitPreviewStatus) {
+      outfitPreviewStatus.textContent = "Supabase 或 AI 穿搭函数还没有配置完成。";
+    }
+    return;
+  }
+
+  isOutfitGenerating = true;
+  syncOutfitActionButtons(groupedItems);
   syncOutfitPreview(groupedItems);
+
+  try {
+    const client = await ensureSupabaseClient();
+
+    if (!client) {
+      throw new Error(supabaseLoadErrorMessage || "Supabase SDK 加载失败，请稍后重试。");
+    }
+
+    if (!currentUser || !currentSession?.access_token) {
+      throw new Error("请先登录账号，再生成 AI 穿搭试穿图。");
+    }
+
+    const referenceBoardDataUrl = await buildOutfitReferenceBoardDataUrl(selectedGarments);
+    const { data, error } = await withTimeout(
+      client.functions.invoke(AI_OUTFIT_FUNCTION_NAME, {
+        body: {
+          referenceBoardDataUrl,
+          garments: selectedGarments.map((item) => ({
+            id: item.id,
+            name: item.name,
+            type: item.type,
+            categoryText: item.categoryText,
+            color: item.color,
+            seasons: item.seasons,
+            imageUrl: item.imageUrl,
+            imageDataUrl: item.imageDataUrl
+          }))
+        }
+      }),
+      OUTFIT_GENERATION_TIMEOUT_MS,
+      "AI 生成试穿图超时了。请稍后重试。"
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    const outputUrl = String(data?.output?.imageUrl || "").trim();
+
+    if (!outputUrl) {
+      throw new Error("AI 没有返回可用的试穿图。");
+    }
+
+    outfitAppliedSelection = {
+      ...outfitDraftSelection
+    };
+    setOutfitGeneratedPreview(outputUrl);
+    syncOutfitSelectionUi(groupedItems);
+    syncOutfitPreview(groupedItems);
+  } catch (error) {
+    console.error(error);
+    outfitAppliedSelection = {
+      ...outfitDraftSelection
+    };
+    setOutfitGeneratedPreview("");
+    const refreshedGroups = groupGarmentsByOutfitSlot();
+    syncOutfitSelectionUi(refreshedGroups);
+    if (outfitPreviewStatus) {
+      outfitPreviewStatus.textContent = await getReadableOutfitErrorMessage(error, "AI 生成试穿图失败，请稍后重试。");
+    }
+  } finally {
+    isOutfitGenerating = false;
+    const finalGroups = groupGarmentsByOutfitSlot();
+    syncOutfitActionButtons(finalGroups);
+    syncOutfitPreview(finalGroups);
+  }
 }
 
 function resetOutfitStudio() {
   outfitDraftSelection = createEmptyOutfitSelection();
   outfitAppliedSelection = createEmptyOutfitSelection();
+  setOutfitGeneratedPreview("");
+  isOutfitGenerating = false;
 
   const groupedItems = groupGarmentsByOutfitSlot();
   syncOutfitSelectionUi(groupedItems);
@@ -2559,7 +2877,7 @@ outfitSelectorRows?.addEventListener("click", (event) => {
 });
 
 outfitLoadButton?.addEventListener("click", () => {
-  applyCurrentOutfitSelection();
+  void generateAiOutfitPreview();
 });
 
 outfitResetButton?.addEventListener("click", () => {

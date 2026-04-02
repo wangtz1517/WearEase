@@ -349,8 +349,8 @@
             </div>
 
             <div class="outfit-studio-actions">
-              <button class="secondary-button inline-button" type="button" id="outfit-load-button">加载到小人</button>
-              <button class="ghost-button inline-button" type="button" id="outfit-reset-button">清空预览</button>
+              <button class="secondary-button inline-button" type="button" id="outfit-load-button">AI 生成试穿图</button>
+              <button class="ghost-button inline-button" type="button" id="outfit-reset-button">清空结果</button>
             </div>
           </div>
 
@@ -371,6 +371,7 @@
                     <span class="outfit-mannequin-leg is-right"></span>
                   </div>
 
+                  <img class="outfit-preview-render" id="outfit-preview-render" alt="AI 生成的穿搭试穿图" hidden>
                   <div class="outfit-preview-layer outfit-preview-layer--bottom" data-outfit-preview-layer="bottom" hidden></div>
                   <div class="outfit-preview-layer outfit-preview-layer--top" data-outfit-preview-layer="top" hidden></div>
                   <div class="outfit-preview-layer outfit-preview-layer--outer" data-outfit-preview-layer="outer" hidden></div>
@@ -379,7 +380,7 @@
               </div>
 
               <p class="outfit-preview-status" id="outfit-preview-status">
-                小人当前还是空白状态。先从左侧选择衣服，再点击“加载到小人”。
+                先从左侧选两件或更多衣服，再点击“AI 生成试穿图”。
               </p>
 
               <div class="tag-row outfit-selection-summary" id="outfit-selected-summary"></div>

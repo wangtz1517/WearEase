@@ -3047,6 +3047,18 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
   pointer-events: none;
 }
 
+.outfit-preview-render {
+  position: absolute;
+  inset: 18px;
+  z-index: 40;
+  width: calc(100% - 36px);
+  height: calc(100% - 36px);
+  object-fit: cover;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 24px 38px rgba(52, 38, 28, 0.14);
+}
+
 .outfit-preview-layer--bottom {
   z-index: 12;
 }
@@ -3132,6 +3144,10 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
   margin: 0;
   color: var(--ink-soft);
   line-height: 1.7;
+}
+
+.outfit-preview-panel.has-ai-render .outfit-mannequin {
+  opacity: 0.18;
 }
 
 .outfit-selection-summary {
