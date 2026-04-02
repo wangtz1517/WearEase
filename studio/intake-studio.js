@@ -1,7 +1,15 @@
 const APP_CONFIG = window.APP_CONFIG || {};
-const SERVICE_BASE_URL = APP_CONFIG.aiServiceBaseUrl || "http://127.0.0.1:8123";
-const POLL_INTERVAL_MS = 1200;
-const MAX_POLL_COUNT = 90;
+const SUPABASE_URL = String(APP_CONFIG.supabaseUrl || "").trim();
+const SUPABASE_ANON_KEY = String(APP_CONFIG.supabaseAnonKey || "").trim();
+const AI_INTAKE_FUNCTION_NAME = String(APP_CONFIG.aiIntakeFunctionName || "ai-intake").trim();
+const SUPABASE_CDN_URLS = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+  "https://unpkg.com/@supabase/supabase-js@2"
+];
+const MAX_SOURCE_DIMENSION = 1600;
+const MAX_SOURCE_DATA_URL_LENGTH = 5_500_000;
+const AI_INTAKE_CHANNEL_NAME = "atelier-archive-ai-intake";
+const AI_INTAKE_PENDING_GARMENT_KEY = "atelier-archive-ai-intake-pending-garment";
 const IS_EMBED_MODE = new URLSearchParams(window.location.search).get("embed") === "1";
 
 const fileInput = document.querySelector("#file-input");
@@ -39,16 +47,16 @@ const garmentBrandInput = document.querySelector("#garment-brand");
 
 const categoryLabels = {
   top: "上装",
-  bottom: "裤装",
+  bottom: "下装",
   outer: "外套",
-  dress: "裙装",
+  dress: "连衣裙",
   accessory: "配饰"
 };
 
 const seasonDefaults = {
   top: "春秋",
   bottom: "四季",
-  outer: "春秋",
+  outer: "秋冬",
   dress: "春夏",
   accessory: "四季"
 };
@@ -59,14 +67,163 @@ const state = {
   sourceDataUrl: "",
   localPreviewUrl: "",
   previewObjectUrl: "",
-  currentJobId: null,
-  currentJob: null,
   isSubmitting: false,
   latestStandardUrl: ""
 };
 
+let currentSession = null;
+let currentUser = null;
+let supabaseClient = null;
+let supabaseScriptLoadPromise = null;
+let supabaseLoadErrorMessage = "";
+let hasBoundAuthStateListener = false;
+
+const aiIntakeChannel = "BroadcastChannel" in window ? new BroadcastChannel(AI_INTAKE_CHANNEL_NAME) : null;
+
 if (IS_EMBED_MODE) {
   document.body.classList.add("embed-mode");
+}
+
+function hasSupabaseConfig() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && AI_INTAKE_FUNCTION_NAME);
+}
+
+function updatePreviewStatus(text) {
+  if (previewStatus) {
+    previewStatus.textContent = text;
+  }
+}
+
+function getIdleStatusText() {
+  if (!hasSupabaseConfig()) {
+    return "Supabase 未配置";
+  }
+
+  if (!currentUser) {
+    return "请先在主页面登录账号，再使用 AI 处理";
+  }
+
+  if (!state.sourceDataUrl) {
+    return "上传衣服图片后即可开始处理";
+  }
+
+  if (!state.latestStandardUrl) {
+    return "图片已就绪，点击开始处理";
+  }
+
+  return "处理完成，可导入衣柜";
+}
+
+function syncIdleStatus() {
+  if (!state.isSubmitting) {
+    updatePreviewStatus(getIdleStatusText());
+  }
+}
+
+function initializeSupabaseClient() {
+  if (supabaseClient || !hasSupabaseConfig() || !window.supabase?.createClient) {
+    return supabaseClient;
+  }
+
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true
+    }
+  });
+
+  return supabaseClient;
+}
+
+function loadExternalScript(url) {
+  return new Promise((resolve, reject) => {
+    if (window.supabase?.createClient) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load ${url}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureSupabaseClient() {
+  if (!hasSupabaseConfig()) {
+    return null;
+  }
+
+  if (initializeSupabaseClient()) {
+    supabaseLoadErrorMessage = "";
+    return supabaseClient;
+  }
+
+  if (supabaseScriptLoadPromise) {
+    return supabaseScriptLoadPromise;
+  }
+
+  supabaseScriptLoadPromise = (async () => {
+    for (const url of SUPABASE_CDN_URLS) {
+      try {
+        await loadExternalScript(url);
+
+        if (initializeSupabaseClient()) {
+          supabaseLoadErrorMessage = "";
+          return supabaseClient;
+        }
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+
+    supabaseLoadErrorMessage = "Supabase SDK 加载失败，请检查当前网络。";
+    return null;
+  })();
+
+  try {
+    return await supabaseScriptLoadPromise;
+  } finally {
+    supabaseScriptLoadPromise = null;
+  }
+}
+
+async function initializeSupabaseSession() {
+  const client = await ensureSupabaseClient();
+
+  if (!client) {
+    currentSession = null;
+    currentUser = null;
+    syncIdleStatus();
+    setSubmitState(false);
+    return null;
+  }
+
+  const { data, error } = await client.auth.getSession();
+
+  if (error) {
+    throw error;
+  }
+
+  currentSession = data.session || null;
+  currentUser = currentSession?.user || null;
+
+  if (!hasBoundAuthStateListener) {
+    client.auth.onAuthStateChange((_event, session) => {
+      currentSession = session || null;
+      currentUser = currentSession?.user || null;
+      setSubmitState(state.isSubmitting);
+      syncIdleStatus();
+    });
+
+    hasBoundAuthStateListener = true;
+  }
+
+  setSubmitState(state.isSubmitting);
+  syncIdleStatus();
+  return client;
 }
 
 function clearCanvas(canvas) {
@@ -97,6 +254,11 @@ function drawImageToCanvas(image, canvas) {
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     const image = new Image();
+
+    if (/^https?:\/\//i.test(url)) {
+      image.crossOrigin = "anonymous";
+    }
+
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Failed to load image: ${url}`));
     image.src = url;
@@ -113,27 +275,107 @@ async function renderCanvasFromUrl(url, canvas) {
   drawImageToCanvas(image, canvas);
 }
 
-function absoluteUrl(pathname) {
-  if (!pathname) {
-    return "";
+function fitWithin(width, height, maxDimension) {
+  const longestSide = Math.max(width, height) || 1;
+  const scale = Math.min(1, maxDimension / longestSide);
+
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale))
+  };
+}
+
+function mimeTypeFromDataUrl(dataUrl) {
+  const match = /^data:(.+?);base64,/.exec(dataUrl || "");
+  return match?.[1] || "image/png";
+}
+
+function extensionFromMimeType(mimeType = "image/png") {
+  if (mimeType === "image/jpeg") {
+    return "jpg";
   }
 
-  if (/^https?:\/\//i.test(pathname)) {
-    return pathname;
+  if (mimeType === "image/webp") {
+    return "webp";
   }
 
-  return `${SERVICE_BASE_URL}${pathname}`;
+  return "png";
+}
+
+function buildUploadFilename(name, mimeType) {
+  const baseName = (name || "upload")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "upload";
+
+  return `${baseName}.${extensionFromMimeType(mimeType)}`;
+}
+
+function drawImageToSizedCanvas(image, width, height) {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  canvas.width = width;
+  canvas.height = height;
+
+  if (!context) {
+    throw new Error("Canvas is not available in this browser.");
+  }
+
+  context.clearRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  return canvas;
+}
+
+function exportCanvasDataUrl(canvas, mimeType, quality) {
+  return canvas.toDataURL(mimeType, quality);
+}
+
+async function optimizeImageFile(file) {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await loadImage(objectUrl);
+    let { width, height } = fitWithin(image.naturalWidth || image.width, image.naturalHeight || image.height, MAX_SOURCE_DIMENSION);
+    let canvas = drawImageToSizedCanvas(image, width, height);
+    let dataUrl = exportCanvasDataUrl(canvas, file.type === "image/png" ? "image/png" : "image/jpeg", 0.92);
+
+    if (dataUrl.length > MAX_SOURCE_DATA_URL_LENGTH) {
+      dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.86);
+    }
+
+    if (dataUrl.length > MAX_SOURCE_DATA_URL_LENGTH) {
+      ({ width, height } = fitWithin(image.naturalWidth || image.width, image.naturalHeight || image.height, 1280));
+      canvas = drawImageToSizedCanvas(image, width, height);
+      dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.8);
+    }
+
+    if (dataUrl.length > MAX_SOURCE_DATA_URL_LENGTH) {
+      throw new Error("图片过大，请换一张更小的图片后再试。");
+    }
+
+    return {
+      dataUrl,
+      previewUrl: objectUrl,
+      sourceName: buildUploadFilename(file.name, mimeTypeFromDataUrl(dataUrl))
+    };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
 }
 
 function deriveNameFromSource(sourceName) {
-  return sourceName
+  return (sourceName || "")
     .replace(/\.[^.]+$/, "")
     .replace(/[_-]+/g, " ")
     .trim();
 }
 
 function getDisplayName() {
-  return garmentNameInput?.value.trim() || deriveNameFromSource(state.sourceName || "") || "未命名衣物";
+  return garmentNameInput?.value.trim() || deriveNameFromSource(state.sourceName) || "未命名衣物";
 }
 
 function getFieldValue(input, fallback) {
@@ -178,49 +420,13 @@ function updateWorkbenchState() {
   }
 }
 
-function updatePreviewStatus(text) {
-  if (previewStatus) {
-    previewStatus.textContent = text;
-  }
-}
-
-function mapJobStatusToBadge(job) {
-  if (!job) {
-    return state.sourceDataUrl ? "待生成" : "等待上传";
-  }
-
-  if (job.status === "queued") {
-    return "任务已创建";
-  }
-
-  if (job.status === "processing") {
-    return "处理中";
-  }
-
-  if (job.status === "needs_review") {
-    return "已生成";
-  }
-
-  if (job.status === "failed") {
-    return "生成失败";
-  }
-
-  return job.status || "处理中";
-}
-
 function syncArchivePreview() {
   const previewImageUrl = getArchivePreviewImageUrl();
-  const categoryLabel = categoryLabels[state.category] || "上装";
-  const locationValue = getFieldValue(garmentLocationInput, "待整理");
-  const colorValue = getFieldValue(garmentColorInput, "待确认");
-  const seasonValue = getFieldValue(garmentSeasonInput, "待确认");
-  const purchaseDateValue = formatPurchaseDate(garmentPurchaseDateInput?.value);
-  const priceValue = formatPrice(garmentPriceInput?.value);
-  const brandValue = getFieldValue(garmentBrandInput, "未填写");
 
   if (archivePreviewImage) {
     if (previewImageUrl) {
       archivePreviewImage.hidden = false;
+
       if (archivePreviewImage.src !== previewImageUrl) {
         archivePreviewImage.src = previewImageUrl;
       }
@@ -239,31 +445,31 @@ function syncArchivePreview() {
   }
 
   if (archivePreviewCategory) {
-    archivePreviewCategory.textContent = categoryLabel;
+    archivePreviewCategory.textContent = categoryLabels[state.category] || "上装";
   }
 
   if (archivePreviewLocation) {
-    archivePreviewLocation.textContent = locationValue;
+    archivePreviewLocation.textContent = getFieldValue(garmentLocationInput, "未填写");
   }
 
   if (archivePreviewColor) {
-    archivePreviewColor.textContent = colorValue;
+    archivePreviewColor.textContent = getFieldValue(garmentColorInput, "未填写");
   }
 
   if (archivePreviewSeason) {
-    archivePreviewSeason.textContent = seasonValue;
+    archivePreviewSeason.textContent = getFieldValue(garmentSeasonInput, "未填写");
   }
 
   if (archivePreviewPurchaseDate) {
-    archivePreviewPurchaseDate.textContent = purchaseDateValue;
+    archivePreviewPurchaseDate.textContent = formatPurchaseDate(garmentPurchaseDateInput?.value);
   }
 
   if (archivePreviewPrice) {
-    archivePreviewPrice.textContent = priceValue;
+    archivePreviewPrice.textContent = formatPrice(garmentPriceInput?.value);
   }
 
   if (archivePreviewBrand) {
-    archivePreviewBrand.textContent = brandValue;
+    archivePreviewBrand.textContent = getFieldValue(garmentBrandInput, "未填写");
   }
 }
 
@@ -274,8 +480,8 @@ function setCategory(category) {
     button.classList.toggle("is-active", button.dataset.category === category);
   });
 
-  if (!garmentSeasonInput?.value.trim() || garmentSeasonInput.value === "待确认") {
-    garmentSeasonInput.value = seasonDefaults[category] || "待确认";
+  if (!garmentSeasonInput?.value.trim()) {
+    garmentSeasonInput.value = seasonDefaults[category] || "四季";
   }
 
   syncArchivePreview();
@@ -284,9 +490,20 @@ function setCategory(category) {
 function setSubmitState(isSubmitting) {
   state.isSubmitting = isSubmitting;
 
+  const canProcess = Boolean(state.sourceDataUrl && currentUser && hasSupabaseConfig() && !isSubmitting);
+
   if (processButton) {
-    processButton.disabled = isSubmitting || !state.sourceDataUrl;
-    processButton.textContent = isSubmitting ? "生成中..." : "生成标准图";
+    processButton.disabled = !canProcess;
+
+    if (isSubmitting) {
+      processButton.textContent = "AI 处理中...";
+    } else if (!hasSupabaseConfig()) {
+      processButton.textContent = "云端未配置";
+    } else if (!currentUser) {
+      processButton.textContent = "登录后可用";
+    } else {
+      processButton.textContent = "开始 AI 处理";
+    }
   }
 
   if (downloadButton) {
@@ -303,134 +520,13 @@ function setSubmitState(isSubmitting) {
 function buildJobNotes() {
   return [
     `category=${state.category}`,
-    `location=${getFieldValue(garmentLocationInput, "待整理")}`,
-    `color=${getFieldValue(garmentColorInput, "待确认")}`,
-    `season=${getFieldValue(garmentSeasonInput, "待确认")}`,
+    `location=${getFieldValue(garmentLocationInput, "未填写")}`,
+    `color=${getFieldValue(garmentColorInput, "未填写")}`,
+    `season=${getFieldValue(garmentSeasonInput, "未填写")}`,
     `purchaseDate=${garmentPurchaseDateInput?.value || ""}`,
     `price=${getFieldValue(garmentPriceInput, "")}`,
     `brand=${getFieldValue(garmentBrandInput, "")}`
   ].join("; ");
-}
-
-async function refreshArtifactPreviews(job) {
-  const sourceUrl = state.localPreviewUrl || absoluteUrl(job?.artifacts?.sourceImageUrl);
-  const standardUrl = absoluteUrl(job?.artifacts?.standardImageUrl);
-
-  if (sourceUrl) {
-    await renderCanvasFromUrl(sourceUrl, sourceCanvas);
-  } else {
-    clearCanvas(sourceCanvas);
-  }
-
-  if (standardUrl) {
-    await renderCanvasFromUrl(standardUrl, standardCanvas);
-  } else {
-    clearCanvas(standardCanvas);
-  }
-
-  state.latestStandardUrl = standardUrl;
-  updateWorkbenchState();
-  syncArchivePreview();
-}
-
-async function fetchJson(pathname, options) {
-  const response = await fetch(`${SERVICE_BASE_URL}${pathname}`, options);
-
-  if (!response.ok) {
-    let message = `Request failed: ${response.status}`;
-
-    try {
-      const body = await response.json();
-      message = body.error || message;
-    } catch {}
-
-    throw new Error(message);
-  }
-
-  return response.json();
-}
-
-async function pollJob(jobId) {
-  for (let attempt = 0; attempt < MAX_POLL_COUNT; attempt += 1) {
-    const job = await fetchJson(`/api/intake/jobs/${jobId}`);
-    state.currentJob = job;
-
-    updatePreviewStatus(mapJobStatusToBadge(job));
-    await refreshArtifactPreviews(job);
-
-    if (job.status === "needs_review" || job.status === "failed") {
-      return job;
-    }
-
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, POLL_INTERVAL_MS);
-    });
-  }
-
-  throw new Error("轮询超时，请检查本地 AI 服务是否正常运行。");
-}
-
-async function submitCurrentJob() {
-  if (!state.sourceDataUrl || state.isSubmitting) {
-    return;
-  }
-
-  state.currentJob = null;
-  state.currentJobId = null;
-  state.latestStandardUrl = "";
-  clearCanvas(standardCanvas);
-  updateWorkbenchState();
-  syncArchivePreview();
-
-  setSubmitState(true);
-  updatePreviewStatus("创建任务中");
-
-  try {
-    const payload = {
-      sourceImageDataUrl: state.sourceDataUrl,
-      sourceFilename: state.sourceName || "upload.png",
-      categoryHint: state.category,
-      garmentName: getDisplayName(),
-      notes: buildJobNotes()
-    };
-
-    const created = await fetchJson("/api/intake/jobs", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    state.currentJobId = created.jobId;
-    updatePreviewStatus("开始生成");
-
-    const finalJob = await pollJob(created.jobId);
-    updatePreviewStatus(mapJobStatusToBadge(finalJob));
-  } catch (error) {
-    console.error(error);
-    state.currentJob = {
-      status: "failed",
-      review: {
-        reasons: [error.message]
-      }
-    };
-    state.latestStandardUrl = "";
-    clearCanvas(standardCanvas);
-    updatePreviewStatus("生成失败");
-    syncArchivePreview();
-  } finally {
-    setSubmitState(false);
-  }
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("读取图片失败"));
-    reader.readAsDataURL(file);
-  });
 }
 
 function revokePreviewObjectUrl() {
@@ -447,24 +543,95 @@ async function setSelectedImage({ dataUrl, sourceName, previewUrl }) {
   state.sourceName = sourceName;
   state.localPreviewUrl = previewUrl || dataUrl;
   state.previewObjectUrl = previewUrl?.startsWith("blob:") ? previewUrl : "";
-  state.currentJobId = null;
-  state.currentJob = null;
   state.latestStandardUrl = "";
 
   if (garmentNameInput) {
     garmentNameInput.value = deriveNameFromSource(sourceName);
   }
 
-  if (!garmentSeasonInput?.value.trim() || garmentSeasonInput.value === "待确认") {
-    garmentSeasonInput.value = seasonDefaults[state.category] || "待确认";
+  if (!garmentSeasonInput?.value.trim()) {
+    garmentSeasonInput.value = seasonDefaults[state.category] || "四季";
   }
 
   await renderCanvasFromUrl(state.localPreviewUrl, sourceCanvas);
   clearCanvas(standardCanvas);
-  updatePreviewStatus("待生成");
-  syncArchivePreview();
   setSubmitState(false);
-  updateWorkbenchState();
+  syncArchivePreview();
+  syncIdleStatus();
+}
+
+async function handleSelectedFile(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    updatePreviewStatus("请选择图片文件。");
+    return;
+  }
+
+  const prepared = await optimizeImageFile(file);
+  await setSelectedImage(prepared);
+}
+
+async function submitCurrentJob() {
+  if (!state.sourceDataUrl || state.isSubmitting) {
+    return;
+  }
+
+  if (!hasSupabaseConfig()) {
+    updatePreviewStatus("Supabase 未配置，无法调用 AI。");
+    return;
+  }
+
+  setSubmitState(true);
+  updatePreviewStatus("AI 正在处理图片，请稍候...");
+  state.latestStandardUrl = "";
+  clearCanvas(standardCanvas);
+  syncArchivePreview();
+
+  try {
+    const client = await initializeSupabaseSession();
+
+    if (!client) {
+      throw new Error(supabaseLoadErrorMessage || "Supabase SDK 加载失败。");
+    }
+
+    if (!currentUser || !currentSession?.access_token) {
+      throw new Error("请先登录账号后再使用 AI 处理。");
+    }
+
+    const { data, error } = await client.functions.invoke(AI_INTAKE_FUNCTION_NAME, {
+      body: {
+        sourceImageDataUrl: state.sourceDataUrl,
+        sourceFilename: state.sourceName || "upload.png",
+        categoryHint: state.category,
+        garmentName: getDisplayName(),
+        notes: buildJobNotes()
+      }
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    const outputUrl = String(data?.output?.imageUrl || "").trim();
+
+    if (!outputUrl) {
+      throw new Error("AI 结果中没有返回可用图片。");
+    }
+
+    state.latestStandardUrl = outputUrl;
+    await renderCanvasFromUrl(outputUrl, standardCanvas);
+    syncArchivePreview();
+
+    const requiresReview = Boolean(data?.review?.requiresHumanReview);
+    updatePreviewStatus(requiresReview ? "处理完成，请确认细节后再导入" : "处理完成，可直接导入衣柜");
+  } catch (error) {
+    console.error(error);
+    state.latestStandardUrl = "";
+    clearCanvas(standardCanvas);
+    syncArchivePreview();
+    updatePreviewStatus(error.message || "AI 处理失败，请稍后重试。");
+  } finally {
+    setSubmitState(false);
+  }
 }
 
 function downloadStandardPng() {
@@ -483,13 +650,13 @@ function downloadStandardPng() {
 function buildArchiveNote() {
   const parts = [
     categoryLabels[state.category] || "上装",
-    getFieldValue(garmentLocationInput, "待整理"),
-    getFieldValue(garmentColorInput, "待确认"),
-    getFieldValue(garmentSeasonInput, "待确认")
+    getFieldValue(garmentLocationInput, "未填写"),
+    getFieldValue(garmentColorInput, "未填写"),
+    getFieldValue(garmentSeasonInput, "未填写")
   ];
 
   if (garmentPurchaseDateInput?.value) {
-    parts.push(`购入 ${garmentPurchaseDateInput.value}`);
+    parts.push(`购入日期 ${garmentPurchaseDateInput.value}`);
   }
 
   if (garmentPriceInput?.value.trim()) {
@@ -500,11 +667,33 @@ function buildArchiveNote() {
     parts.push(`品牌 ${garmentBrandInput.value.trim()}`);
   }
 
-  if (state.currentJob?.review?.reasons?.length) {
-    return `${parts.join(" / ")}；复核提示：${state.currentJob.review.reasons.join("；")}`;
+  return `${parts.join(" / ")} / 通过 AI Intake 生成`;
+}
+
+function dispatchGarmentImport(payload) {
+  const targetOrigin = window.location.origin;
+
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(payload, targetOrigin);
   }
 
-  return `${parts.join(" / ")}；AI 标准图已生成`;
+  if (window.opener && !window.opener.closed) {
+    try {
+      window.opener.postMessage(payload, targetOrigin);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
+
+  if (aiIntakeChannel) {
+    aiIntakeChannel.postMessage(payload);
+  }
+
+  try {
+    window.localStorage.setItem(AI_INTAKE_PENDING_GARMENT_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn(error);
+  }
 }
 
 function importIntoParentWardrobe() {
@@ -514,11 +703,12 @@ function importIntoParentWardrobe() {
 
   const payload = {
     type: "ai-intake:add-garment",
+    transferId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     garmentName: getDisplayName(),
     category: state.category,
-    location: getFieldValue(garmentLocationInput, "待整理"),
-    color: getFieldValue(garmentColorInput, "待确认"),
-    season: getFieldValue(garmentSeasonInput, "待确认"),
+    location: getFieldValue(garmentLocationInput, "未填写"),
+    color: getFieldValue(garmentColorInput, "未填写"),
+    season: getFieldValue(garmentSeasonInput, "未填写"),
     purchaseDate: garmentPurchaseDateInput?.value || "",
     price: getFieldValue(garmentPriceInput, ""),
     brand: getFieldValue(garmentBrandInput, ""),
@@ -526,23 +716,8 @@ function importIntoParentWardrobe() {
     imageUrl: state.latestStandardUrl
   };
 
-  window.parent.postMessage(payload, "*");
-  updatePreviewStatus("已加入主衣柜");
-}
-
-async function handleSelectedFile(file) {
-  if (!file || !file.type.startsWith("image/")) {
-    return;
-  }
-
-  const dataUrl = await fileToDataUrl(file);
-  const objectUrl = URL.createObjectURL(file);
-
-  await setSelectedImage({
-    dataUrl,
-    sourceName: file.name,
-    previewUrl: objectUrl
-  });
+  dispatchGarmentImport(payload);
+  updatePreviewStatus("已发送到衣柜，请回主页面查看。");
 }
 
 triggerUploadButton?.addEventListener("click", () => {
@@ -550,9 +725,15 @@ triggerUploadButton?.addEventListener("click", () => {
 });
 
 fileInput?.addEventListener("change", async (event) => {
-  const file = event.currentTarget.files?.[0];
-  await handleSelectedFile(file);
-  event.currentTarget.value = "";
+  try {
+    const file = event.currentTarget.files?.[0];
+    await handleSelectedFile(file);
+  } catch (error) {
+    console.error(error);
+    updatePreviewStatus(error.message || "处理图片时发生错误。");
+  } finally {
+    event.currentTarget.value = "";
+  }
 });
 
 dropzone?.addEventListener("dragover", (event) => {
@@ -567,7 +748,13 @@ dropzone?.addEventListener("dragleave", () => {
 dropzone?.addEventListener("drop", async (event) => {
   event.preventDefault();
   dropzone.classList.remove("is-dragover");
-  await handleSelectedFile(event.dataTransfer?.files?.[0]);
+
+  try {
+    await handleSelectedFile(event.dataTransfer?.files?.[0]);
+  } catch (error) {
+    console.error(error);
+    updatePreviewStatus(error.message || "处理图片时发生错误。");
+  }
 });
 
 dropzone?.addEventListener("click", (event) => {
@@ -606,7 +793,7 @@ categoryButtons.forEach((button) => {
 });
 
 processButton?.addEventListener("click", () => {
-  submitCurrentJob();
+  void submitCurrentJob();
 });
 
 downloadButton?.addEventListener("click", () => {
@@ -619,14 +806,17 @@ importButton?.addEventListener("click", () => {
 
 window.addEventListener("beforeunload", () => {
   revokePreviewObjectUrl();
+  aiIntakeChannel?.close();
 });
 
 setCategory("top");
 clearCanvas(sourceCanvas);
 clearCanvas(standardCanvas);
-updatePreviewStatus("等待上传");
-syncArchivePreview();
-downloadButton.disabled = true;
-importButton.disabled = true;
 setSubmitState(false);
-updateWorkbenchState();
+syncArchivePreview();
+syncIdleStatus();
+
+initializeSupabaseSession().catch((error) => {
+  console.error(error);
+  updatePreviewStatus(error.message || "Supabase 会话初始化失败。");
+});

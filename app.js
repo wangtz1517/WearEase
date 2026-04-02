@@ -173,6 +173,8 @@ let isSupabaseScriptLoading = false;
 let supabaseScriptLoadPromise = null;
 let supabaseLoadErrorMessage = "";
 let supabaseClient = null;
+const AI_INTAKE_CHANNEL_NAME = "atelier-archive-ai-intake";
+const AI_INTAKE_PENDING_GARMENT_KEY = "atelier-archive-ai-intake-pending-garment";
 const CUSTOM_GARMENTS_KEY = "atelier-archive-custom-garments";
 const WARDROBE_VIEW_KEY = "atelier-archive-wardrobe-view";
 const WARDROBE_VISIBLE_COLUMNS_KEY = "atelier-archive-wardrobe-visible-columns";
@@ -209,6 +211,8 @@ const WARDROBE_REQUIRED_COLUMNS = WARDROBE_LIST_COLUMNS
   .map((column) => column.field);
 const WARDROBE_DEFAULT_VISIBLE_COLUMNS = WARDROBE_LIST_COLUMNS.map((column) => column.field);
 let currentWardrobeVisibleColumns = WARDROBE_DEFAULT_VISIBLE_COLUMNS.slice();
+const aiIntakeChannel = "BroadcastChannel" in window ? new BroadcastChannel(AI_INTAKE_CHANNEL_NAME) : null;
+const handledAiIntakeTransferIds = new Set();
 const savedOutfits = new Set(
   Array.from(favoriteButtons)
     .filter((button) => button.classList.contains("is-saved"))
@@ -2213,6 +2217,28 @@ wardrobeColumnPicker?.addEventListener("change", (event) => {
   setWardrobeVisibleColumns([...WARDROBE_REQUIRED_COLUMNS, ...selectedOptionalFields]);
 });
 
+aiIntakeChannel?.addEventListener("message", (event) => {
+  dispatchAiIntakePayload(event.data);
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== AI_INTAKE_PENDING_GARMENT_KEY || !event.newValue) {
+    return;
+  }
+
+  consumePendingAiIntakeGarment(event.newValue);
+});
+
+try {
+  const pendingAiIntakePayload = window.localStorage.getItem(AI_INTAKE_PENDING_GARMENT_KEY);
+
+  if (pendingAiIntakePayload) {
+    consumePendingAiIntakeGarment(pendingAiIntakePayload);
+  }
+} catch {
+  // Ignore localStorage read errors.
+}
+
 document.addEventListener("click", (event) => {
   if (!wardrobeColumnPicker || !wardrobeColumnPicker.classList.contains("is-open")) {
     return;
@@ -2335,11 +2361,44 @@ if (globalSearchResults) {
   });
 }
 
+function dispatchAiIntakePayload(payload) {
+  window.dispatchEvent(new MessageEvent("message", { data: payload }));
+}
+
+function consumePendingAiIntakeGarment(rawValue) {
+  if (!rawValue) {
+    return;
+  }
+
+  try {
+    const payload = JSON.parse(rawValue);
+    dispatchAiIntakePayload(payload);
+  } catch (error) {
+    console.warn(error);
+  } finally {
+    try {
+      window.localStorage.removeItem(AI_INTAKE_PENDING_GARMENT_KEY);
+    } catch {
+      // Ignore localStorage cleanup errors.
+    }
+  }
+}
+
 window.addEventListener("message", (event) => {
   const payload = event.data;
 
   if (!payload || payload.type !== "ai-intake:add-garment") {
     return;
+  }
+
+  const transferId = String(payload.transferId || "").trim();
+
+  if (transferId) {
+    if (handledAiIntakeTransferIds.has(transferId)) {
+      return;
+    }
+
+    handledAiIntakeTransferIds.add(transferId);
   }
 
   const garmentName = payload.garmentName || "AI 新增衣物";
@@ -2377,6 +2436,12 @@ window.addEventListener("message", (event) => {
   applyView("wardrobe");
   window.location.hash = "wardrobe";
   closeAddGarmentModal();
+
+  try {
+    window.localStorage.removeItem(AI_INTAKE_PENDING_GARMENT_KEY);
+  } catch {
+    // Ignore localStorage cleanup errors.
+  }
 });
 
 document.addEventListener("click", (event) => {

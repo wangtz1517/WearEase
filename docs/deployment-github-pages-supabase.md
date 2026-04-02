@@ -1,97 +1,155 @@
-# GitHub Pages + Supabase 部署说明
+# GitHub Pages + Supabase Deployment
 
-## 1. GitHub Pages
+## 1. Frontend URL
 
-仓库里已经加了 GitHub Actions 工作流：
+This project is deployed as a GitHub Pages project site:
+
+```text
+https://wangtz1517.github.io/WearEase/
+```
+
+The static site is published by:
 
 - `.github/workflows/deploy-pages.yml`
 - `scripts/build-pages.js`
 
-你只需要：
-
-1. 推送到 `main`
-2. 进入 GitHub 仓库 `Settings -> Pages`
-3. 把发布方式切换成 `GitHub Actions`
-
-默认站点地址会是：
+After pushing to `main`, check:
 
 ```text
-https://wangtz1517.github.io/AtelierArchive/
+GitHub repository -> Actions -> Deploy GitHub Pages
 ```
 
-## 2. Supabase 项目
+## 2. Supabase Base Setup
 
-在 Supabase 新建项目后，先做三件事：
+Run the SQL in:
 
-1. 打开 SQL Editor
-2. 执行 `supabase/schema.sql`
-3. 在 `Authentication -> URL Configuration` 里配置：
+```text
+supabase/schema.sql
+```
+
+Then configure:
+
+```text
+Authentication -> URL Configuration
+```
+
+Use:
 
 ```text
 Site URL:
-https://wangtz1517.github.io/AtelierArchive/
+https://wangtz1517.github.io/WearEase/
 
 Redirect URL:
-https://wangtz1517.github.io/AtelierArchive/
+https://wangtz1517.github.io/WearEase/
 ```
 
-如果你开启邮箱确认，注册后用户会先收到验证邮件，再回来登录。
+## 3. Public Frontend Config
 
-## 3. 前端公开配置
-
-编辑根目录的 `public-config.js`：
+Fill `public-config.js` with your public project settings:
 
 ```js
 window.APP_CONFIG = Object.assign(
   {
-    siteUrl: "https://wangtz1517.github.io/AtelierArchive/",
+    siteUrl: "https://wangtz1517.github.io/WearEase/",
     supabaseUrl: "https://YOUR_PROJECT.supabase.co",
     supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
     supabaseBucket: "garment-images",
-    aiServiceBaseUrl: "http://127.0.0.1:8123"
+    aiIntakeFunctionName: "ai-intake"
   },
   window.APP_CONFIG || {}
 );
 ```
 
-说明：
+Notes:
 
-- `supabaseAnonKey` 是前端公开 key，可以放在 GitHub Pages。
-- 绝对不要把 `service_role` key 放进前端。
-- `aiServiceBaseUrl` 现在默认还是本地开发地址。
+- `supabaseAnonKey` is the public browser key.
+- Never put `service_role` into `public-config.js`.
+- `aiServiceBaseUrl` is no longer required for the web AI flow.
 
-## 4. 当前已接好的能力
+## 4. Edge Function Secrets
 
-- 邮箱注册
-- 邮箱密码登录
-- 登录态恢复
-- 衣柜自定义衣物同步到 `garments` 表
-- 删除和编辑同步到云端
-- 衣物图片支持上传到 `garment-images` bucket
+The AI workflow now uses a Supabase Edge Function instead of the local `127.0.0.1` service.
 
-## 5. 当前仍是第二阶段的部分
-
-AI 处理台现在还是调用本地服务：
+Required secrets are listed in:
 
 ```text
-http://127.0.0.1:8123
+supabase/functions/.env.example
 ```
 
-所以 GitHub Pages 上线后：
+Minimum production values:
 
-- 主站
-- 登录/注册
-- 云端衣柜数据
+```text
+AI_PROVIDER=seedream
+VOLCENGINE_API_KEY=...
+VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+VOLCENGINE_IMAGE_MODEL=doubao-seedream-5-0-260128
+GARMENT_IMAGES_BUCKET=garment-images
+```
 
-这些都可以工作。
+You can set them either in the Supabase dashboard or with the CLI.
 
-但 `AI 图片标准化处理` 还需要你把 `ai-intake-service` 单独部署到可公网访问的地址，然后把 `public-config.js` 里的 `aiServiceBaseUrl` 改成那个线上地址。
+Example CLI command:
 
-## 6. 建议的下一步
+```bash
+supabase secrets set \
+  AI_PROVIDER=seedream \
+  VOLCENGINE_API_KEY=your_key \
+  VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3 \
+  VOLCENGINE_IMAGE_MODEL=doubao-seedream-5-0-260128 \
+  GARMENT_IMAGES_BUCKET=garment-images
+```
 
-推荐顺序：
+## 5. Edge Function Deployment
 
-1. 先推 GitHub Pages，把主站上线
-2. 再创建 Supabase 项目并执行 `supabase/schema.sql`
-3. 填写 `public-config.js`，验证注册/登录/云端保存
-4. 最后再单独部署 `ai-intake-service`
+Function source:
+
+```text
+supabase/functions/ai-intake/index.ts
+```
+
+Optional CLI config:
+
+```text
+supabase/config.toml
+```
+
+Typical deployment flow:
+
+```bash
+supabase login
+supabase link --project-ref your-project-ref
+supabase functions deploy ai-intake
+```
+
+This function:
+
+- requires a signed-in Supabase user
+- calls the Volcengine image API with server-side secrets
+- uploads the generated output image into Supabase Storage
+- returns the final public image URL to the browser
+
+## 6. Current AI Behavior
+
+The browser AI studio now works like this:
+
+1. User signs in on the website.
+2. `studio/intake-studio.js` invokes `ai-intake`.
+3. The function generates the cleaned garment image.
+4. The result image is uploaded to `garment-images`.
+5. The studio sends the final garment payload back into the wardrobe page.
+
+This means:
+
+- cross-device AI usage is supported after the function is deployed
+- your local computer does not need to stay online
+- the Volcengine API key stays server-side
+
+## 7. Local Legacy Service
+
+The old local service still exists in:
+
+```text
+ai-intake-service/
+```
+
+But it is no longer required for GitHub Pages production usage.
