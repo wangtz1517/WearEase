@@ -2136,6 +2136,30 @@ button {
   border: 1px solid rgba(71, 46, 29, 0.08);
 }
 
+.auth-status-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(71, 46, 29, 0.1);
+}
+
+.auth-status-card .eyebrow {
+  color: var(--ink-soft);
+}
+
+.auth-status-card strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.auth-status-card p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
 .auth-modal-lead {
   margin: 0;
   color: var(--ink);

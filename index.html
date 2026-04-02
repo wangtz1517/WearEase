@@ -58,15 +58,6 @@
           <span class="menu-full">设置</span>
         </button>
 
-        <section class="sidebar-cloud-card" aria-live="polite">
-          <p class="eyebrow">Cloud Sync</p>
-          <strong id="auth-status-title">本地模式</strong>
-          <p id="auth-status-copy">未登录时，衣柜数据只保存在当前浏览器。</p>
-          <div class="sidebar-cloud-actions">
-            <button class="ghost-button inline-button" type="button" data-open-auth-modal>登录 / 注册</button>
-            <button class="ghost-button inline-button" type="button" data-auth-signout hidden>退出登录</button>
-          </div>
-        </section>
       </div>
     </aside>
 
@@ -563,6 +554,12 @@
 
           <div class="auth-modal-layout">
             <section class="auth-modal-copy">
+              <section class="auth-status-card" aria-live="polite">
+                <p class="eyebrow">Cloud Sync</p>
+                <strong id="auth-status-title">本地模式</strong>
+                <p id="auth-status-copy">未登录时，衣柜数据只保存在当前浏览器。</p>
+              </section>
+
               <p class="auth-modal-lead">注册后就可以把衣柜数据保存到 Supabase，包括你新增的衣服、编辑内容和后续上传的图片。</p>
               <ul class="auth-modal-points">
                 <li>第一次使用点“注册”创建账号</li>
