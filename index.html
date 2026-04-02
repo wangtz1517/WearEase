@@ -379,6 +379,52 @@
                 </div>
               </div>
 
+              <section class="outfit-model-panel" aria-labelledby="outfit-model-panel-title">
+                <div class="outfit-model-panel-head">
+                  <div>
+                    <p class="eyebrow">Model Profile</p>
+                    <h4 id="outfit-model-panel-title">试穿人物参数</h4>
+                  </div>
+                  <p class="outfit-model-panel-note">本版暂不上传面部照片，后续可再接入本人面部参考。</p>
+                </div>
+
+                <div class="outfit-model-grid">
+                  <label class="outfit-model-field">
+                    <span>性别</span>
+                    <select id="outfit-model-gender">
+                      <option value="">默认模特</option>
+                      <option value="female">女</option>
+                      <option value="male">男</option>
+                    </select>
+                  </label>
+
+                  <label class="outfit-model-field">
+                    <span>人种</span>
+                    <select id="outfit-model-ethnicity">
+                      <option value="asian" selected>亚洲人</option>
+                      <option value="white">白人</option>
+                      <option value="black">黑人</option>
+                    </select>
+                  </label>
+
+                  <label class="outfit-model-field">
+                    <span>身高</span>
+                    <div class="outfit-model-input-wrap">
+                      <input id="outfit-model-height" type="number" inputmode="numeric" min="120" max="220" step="1" placeholder="170">
+                      <span class="outfit-model-unit">cm</span>
+                    </div>
+                  </label>
+
+                  <label class="outfit-model-field">
+                    <span>体重</span>
+                    <div class="outfit-model-input-wrap">
+                      <input id="outfit-model-weight" type="number" inputmode="numeric" min="30" max="180" step="1" placeholder="55">
+                      <span class="outfit-model-unit">kg</span>
+                    </div>
+                  </label>
+                </div>
+              </section>
+
               <p class="outfit-preview-status" id="outfit-preview-status">
                 先从左侧选两件或更多衣服，再点击“AI 生成试穿图”。
               </p>

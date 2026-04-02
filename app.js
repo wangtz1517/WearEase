@@ -140,6 +140,10 @@ const outfitPreviewStatus = document.querySelector("#outfit-preview-status");
 const outfitSelectedSummary = document.querySelector("#outfit-selected-summary");
 const outfitPreviewPanel = document.querySelector(".outfit-preview-panel");
 const outfitPreviewRender = document.querySelector("#outfit-preview-render");
+const outfitModelGenderInput = document.querySelector("#outfit-model-gender");
+const outfitModelHeightInput = document.querySelector("#outfit-model-height");
+const outfitModelWeightInput = document.querySelector("#outfit-model-weight");
+const outfitModelEthnicityInput = document.querySelector("#outfit-model-ethnicity");
 const outfitPreviewLayers = Object.fromEntries(
   Array.from(document.querySelectorAll("[data-outfit-preview-layer]")).map((node) => [node.dataset.outfitPreviewLayer, node])
 );
@@ -271,6 +275,7 @@ let outfitDraftSelection = createEmptyOutfitSelection();
 let outfitAppliedSelection = createEmptyOutfitSelection();
 let isOutfitGenerating = false;
 let outfitGeneratedPreviewUrl = "";
+let outfitAppliedModelProfile = createDefaultOutfitModelProfile();
 
 try {
   currentWardrobeView = window.localStorage.getItem(WARDROBE_VIEW_KEY) === "list" ? "list" : "board";
@@ -1370,6 +1375,73 @@ function createEmptyOutfitSelection() {
   }, {});
 }
 
+function clampOutfitMetric(value, min, max) {
+  const numeric = Number.parseFloat(String(value || "").trim());
+
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
+function createDefaultOutfitModelProfile() {
+  return {
+    gender: "",
+    heightCm: null,
+    weightKg: null,
+    ethnicity: "asian"
+  };
+}
+
+function normalizeOutfitModelProfile(profile) {
+  const nextProfile = createDefaultOutfitModelProfile();
+  const safeProfile = profile && typeof profile === "object" ? profile : {};
+  const gender = String(safeProfile.gender || "").trim().toLowerCase();
+  const ethnicity = String(safeProfile.ethnicity || "").trim().toLowerCase();
+
+  nextProfile.gender = ["female", "male"].includes(gender) ? gender : "";
+  nextProfile.ethnicity = ["asian", "white", "black"].includes(ethnicity) ? ethnicity : "asian";
+  nextProfile.heightCm = clampOutfitMetric(safeProfile.heightCm, 120, 220);
+  nextProfile.weightKg = clampOutfitMetric(safeProfile.weightKg, 30, 180);
+
+  return nextProfile;
+}
+
+function readOutfitModelProfile() {
+  return normalizeOutfitModelProfile({
+    gender: outfitModelGenderInput?.value || "",
+    heightCm: outfitModelHeightInput?.value || "",
+    weightKg: outfitModelWeightInput?.value || "",
+    ethnicity: outfitModelEthnicityInput?.value || "asian"
+  });
+}
+
+function applyOutfitModelProfile(profile = createDefaultOutfitModelProfile()) {
+  const normalized = normalizeOutfitModelProfile(profile);
+
+  if (outfitModelGenderInput) {
+    outfitModelGenderInput.value = normalized.gender;
+  }
+
+  if (outfitModelHeightInput) {
+    outfitModelHeightInput.value = normalized.heightCm ? String(normalized.heightCm) : "";
+  }
+
+  if (outfitModelWeightInput) {
+    outfitModelWeightInput.value = normalized.weightKg ? String(normalized.weightKg) : "";
+  }
+
+  if (outfitModelEthnicityInput) {
+    outfitModelEthnicityInput.value = normalized.ethnicity;
+  }
+}
+
+function getOutfitModelProfileSignature(profile = createDefaultOutfitModelProfile()) {
+  const normalized = normalizeOutfitModelProfile(profile);
+  return JSON.stringify(normalized);
+}
+
 function drawRoundedRect(context, x, y, width, height, radius) {
   if (typeof context.roundRect === "function") {
     context.beginPath();
@@ -1849,10 +1921,13 @@ function syncOutfitSelectionUi(groupedItems) {
 function syncOutfitPreview(groupedItems) {
   const selectedItems = getSelectedOutfitItems(outfitAppliedSelection, groupedItems);
   const draftItems = getSelectedOutfitItems(outfitDraftSelection, groupedItems);
+  const draftModelProfile = readOutfitModelProfile();
+  const hasPendingModelProfileChanges = getOutfitModelProfileSignature(draftModelProfile) !== getOutfitModelProfileSignature(outfitAppliedModelProfile);
   setOutfitGeneratedPreview(outfitGeneratedPreviewUrl);
 
   if (outfitPreviewStatus) {
-    const hasDraftChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
+    const hasDraftSelectionChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
+    const hasDraftChanges = hasDraftSelectionChanges || hasPendingModelProfileChanges;
     const draftSelectedCount = getSelectedOutfitGarments(outfitDraftSelection, groupedItems).length;
 
     if (isOutfitGenerating) {
@@ -1863,8 +1938,10 @@ function syncOutfitPreview(groupedItems) {
       outfitPreviewStatus.textContent = "生成 AI 试穿图前，请先登录账号。";
     } else if (!selectedItems.length || !outfitGeneratedPreviewUrl) {
       outfitPreviewStatus.textContent = `已选中 ${draftSelectedCount} 件衣服，点击“AI 生成试穿图”开始生成。`;
+    } else if (hasPendingModelProfileChanges && !hasDraftSelectionChanges) {
+      outfitPreviewStatus.textContent = "人物参数已经改过了，当前右侧仍是旧图，请重新生成一次。";
     } else if (hasDraftChanges) {
-      outfitPreviewStatus.textContent = `当前试穿图基于 ${selectedItems.length} 件单品生成，左侧还有新的选择尚未重新生成。`;
+      outfitPreviewStatus.textContent = `当前试穿图基于 ${selectedItems.length} 件单品生成，左侧选衣或右侧人物参数已经变化，请重新生成。`;
     } else {
       outfitPreviewStatus.textContent = `AI 已经生成当前搭配的试穿图。你可以继续换衣服后重新生成。`;
     }
@@ -1943,6 +2020,7 @@ function setOutfitDraftSelection(slotKey, itemId) {
 async function generateAiOutfitPreview() {
   const groupedItems = groupGarmentsByOutfitSlot();
   const selectedGarments = getSelectedOutfitGarments(outfitDraftSelection, groupedItems);
+  const modelProfile = readOutfitModelProfile();
 
   if (!selectedGarments.length) {
     if (outfitPreviewStatus) {
@@ -1978,6 +2056,7 @@ async function generateAiOutfitPreview() {
       client.functions.invoke(AI_OUTFIT_FUNCTION_NAME, {
         body: {
           referenceBoardDataUrl,
+          modelProfile,
           garments: selectedGarments.map((item) => ({
             id: item.id,
             name: item.name,
@@ -2007,6 +2086,7 @@ async function generateAiOutfitPreview() {
     outfitAppliedSelection = {
       ...outfitDraftSelection
     };
+    outfitAppliedModelProfile = modelProfile;
     setOutfitGeneratedPreview(outputUrl);
     syncOutfitSelectionUi(groupedItems);
     syncOutfitPreview(groupedItems);
@@ -2015,6 +2095,7 @@ async function generateAiOutfitPreview() {
     outfitAppliedSelection = {
       ...outfitDraftSelection
     };
+    outfitAppliedModelProfile = modelProfile;
     setOutfitGeneratedPreview("");
     const refreshedGroups = groupGarmentsByOutfitSlot();
     syncOutfitSelectionUi(refreshedGroups);
@@ -2032,6 +2113,8 @@ async function generateAiOutfitPreview() {
 function resetOutfitStudio() {
   outfitDraftSelection = createEmptyOutfitSelection();
   outfitAppliedSelection = createEmptyOutfitSelection();
+  outfitAppliedModelProfile = createDefaultOutfitModelProfile();
+  applyOutfitModelProfile(outfitAppliedModelProfile);
   setOutfitGeneratedPreview("");
   isOutfitGenerating = false;
 
@@ -2884,6 +2967,24 @@ outfitResetButton?.addEventListener("click", () => {
   resetOutfitStudio();
 });
 
+[outfitModelGenderInput, outfitModelEthnicityInput].forEach((input) => {
+  input?.addEventListener("change", () => {
+    syncOutfitPreview(groupGarmentsByOutfitSlot());
+  });
+});
+
+[outfitModelHeightInput, outfitModelWeightInput].forEach((input) => {
+  input?.addEventListener("input", () => {
+    syncOutfitPreview(groupGarmentsByOutfitSlot());
+  });
+
+  input?.addEventListener("blur", () => {
+    const profile = readOutfitModelProfile();
+    applyOutfitModelProfile(profile);
+    syncOutfitPreview(groupGarmentsByOutfitSlot());
+  });
+});
+
 if (wardrobeGrid) {
   wardrobeGrid.addEventListener("click", (event) => {
     const card = event.target.closest("[data-garment-id]");
@@ -3306,6 +3407,7 @@ window.addEventListener("pageshow", () => {
 ensureAddViewNavigation();
 ensureAddViewPage();
 bindAddViewLink();
+applyOutfitModelProfile(outfitAppliedModelProfile);
 applyView(getViewFromHash());
 applySeason("spring");
 renderCustomGarments();

@@ -29,14 +29,29 @@ type OutfitGarmentPayload = {
   imageDataUrl?: string;
 };
 
+type OutfitModelProfilePayload = {
+  gender?: string;
+  heightCm?: number | string;
+  weightKg?: number | string;
+  ethnicity?: string;
+};
+
 type OutfitPreviewPayload = {
   referenceBoardDataUrl?: string;
   garments?: OutfitGarmentPayload[];
+  modelProfile?: OutfitModelProfilePayload;
 };
 
 type AuthenticatedUser = {
   id: string;
   email?: string | null;
+};
+
+type NormalizedOutfitModelProfile = {
+  gender: "" | "female" | "male";
+  heightCm: number | null;
+  weightKg: number | null;
+  ethnicity: "asian" | "white" | "black";
 };
 
 function json(body: unknown, status = 200) {
@@ -192,9 +207,20 @@ function inferGarmentType(item: OutfitGarmentPayload) {
   return "top";
 }
 
-function getTypePromptLabel(type: string) {
+function getTypePromptLabel(item: OutfitGarmentPayload) {
+  const type = String(item.type || "").trim().toLowerCase();
+  const combinedText = `${item.name || ""} ${item.categoryText || ""}`.toLowerCase();
+
   if (type === "bottom") {
-    return "bottom garment";
+    if (/(鐭￥|shorts)/.test(combinedText)) {
+      return "bottom garment or shorts";
+    }
+
+    if (/(瑁欏瓙|skirt)/.test(combinedText)) {
+      return "bottom garment or skirt";
+    }
+
+    return "bottom garment or trousers";
   }
 
   if (type === "outer") {
@@ -209,7 +235,76 @@ function getTypePromptLabel(type: string) {
     return "accessory or shoes";
   }
 
-  return "top or inner layer";
+  if (/(鑳屽績|鍚婂甫|鍐呮惌|鍐呰。|鎶硅兏|tank|camisole|vest|bralette)/.test(combinedText)) {
+    return "inner layer top, camisole, vest, or underwear layer";
+  }
+
+  return "top or upper garment";
+}
+
+function clampModelMetric(value: number | string | undefined, min: number, max: number) {
+  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value || "").trim());
+
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
+function normalizeOutfitModelProfile(profile?: OutfitModelProfilePayload): NormalizedOutfitModelProfile {
+  const safeProfile = profile && typeof profile === "object" ? profile : {};
+  const gender = String(safeProfile.gender || "").trim().toLowerCase();
+  const ethnicity = String(safeProfile.ethnicity || "").trim().toLowerCase();
+
+  return {
+    gender: gender === "male" || gender === "female" ? gender : "",
+    heightCm: clampModelMetric(safeProfile.heightCm, 120, 220),
+    weightKg: clampModelMetric(safeProfile.weightKg, 30, 180),
+    ethnicity: ethnicity === "white" || ethnicity === "black" || ethnicity === "asian" ? ethnicity : "asian"
+  };
+}
+
+function getEthnicityPromptLabel(ethnicity: NormalizedOutfitModelProfile["ethnicity"]) {
+  if (ethnicity === "white") {
+    return "white";
+  }
+
+  if (ethnicity === "black") {
+    return "black";
+  }
+
+  return "Asian";
+}
+
+function getGenderPromptLabel(gender: NormalizedOutfitModelProfile["gender"]) {
+  if (gender === "male") {
+    return "male";
+  }
+
+  if (gender === "female") {
+    return "female";
+  }
+
+  return "adult";
+}
+
+function buildModelProfilePrompt(modelProfile: NormalizedOutfitModelProfile) {
+  const detailFragments = [];
+
+  if (modelProfile.heightCm) {
+    detailFragments.push(`approximately ${modelProfile.heightCm} cm tall`);
+  }
+
+  if (modelProfile.weightKg) {
+    detailFragments.push(`approximately ${modelProfile.weightKg} kg`);
+  }
+
+  const details = detailFragments.length ? `, ${detailFragments.join(" and ")}` : "";
+  const ethnicityLabel = getEthnicityPromptLabel(modelProfile.ethnicity);
+  const genderLabel = getGenderPromptLabel(modelProfile.gender);
+
+  return `Use one ${ethnicityLabel} ${genderLabel} fashion model${details}.`;
 }
 
 function normalizeGarments(garments: OutfitGarmentPayload[] = []) {
@@ -228,10 +323,13 @@ function normalizeGarments(garments: OutfitGarmentPayload[] = []) {
     .filter((item) => item.imageUrl || item.imageDataUrl);
 }
 
-function buildOutfitPrompt(garments: ReturnType<typeof normalizeGarments>) {
+function buildOutfitPrompt(
+  garments: ReturnType<typeof normalizeGarments>,
+  modelProfile: NormalizedOutfitModelProfile
+) {
   const garmentLines = garments.map((item, index) => {
     const details = [item.color, item.seasons, item.categoryText].filter(Boolean).join(", ");
-    return `Reference garment ${index + 1}: ${getTypePromptLabel(item.type)}. Name: ${item.name}.${details ? ` Details: ${details}.` : ""}`;
+    return `Reference garment ${index + 1}: ${getTypePromptLabel(item)}. Name: ${item.name}.${details ? ` Details: ${details}.` : ""}`;
   });
 
   const hasTop = garments.some((item) => item.type === "top");
@@ -240,16 +338,21 @@ function buildOutfitPrompt(garments: ReturnType<typeof normalizeGarments>) {
   const hasAccessory = garments.some((item) => item.type === "accessory");
 
   return [
-    "Create a single realistic full-body outfit preview image.",
+    "Create a single realistic full-body outfit try-on preview image.",
     "The input image is a wardrobe reference board containing separated product photos of the selected garments.",
-    "Dress one front-facing neutral fashion model in all of the selected garments at the same time.",
+    buildModelProfilePrompt(modelProfile),
+    "Dress one front-facing standing fashion model in all of the selected garments at the same time.",
     garmentLines.join(" "),
     hasTop && hasBottom ? "The outfit must clearly wear the selected top with the selected bottom." : "",
     hasOuter ? "If outerwear is provided, layer it naturally over the inner top." : "",
     hasAccessory ? "If shoes or accessories are provided, place them naturally on the model." : "",
     "Use the actual garments from the reference board and preserve their category, color, silhouette, length, proportions, logos, and fabric details.",
-    "Infer the correct garment category from the reference board if any metadata is ambiguous.",
+    "Infer the correct garment category and layering role from the reference board if any metadata is ambiguous, including whether an upper garment is a normal top or an inner vest, camisole, or underwear layer.",
     "Do not place garment cutouts beside the person. Do not show duplicate garments. Do not invent extra clothing items.",
+    "The final image must be a true full-body photograph from head to toe in one frame.",
+    "Both legs must be fully visible, including thighs, knees, calves, ankles, and feet.",
+    "Do not crop the body at the thigh, knee, calf, ankle, or feet. Avoid waist-up, half-body, knee-up, three-quarter, or mid-leg framing.",
+    "Leave a small amount of visible empty space above the head and below the feet so the full figure is clearly contained inside the frame.",
     "The final image should look like a clean try-on preview: one standing model, front view, centered composition, plain studio background."
   ]
     .filter(Boolean)
@@ -308,6 +411,7 @@ async function uploadOutputImage(options: {
 
 async function runOutfitPreview(user: AuthenticatedUser, payload: OutfitPreviewPayload) {
   const garments = normalizeGarments(payload.garments || []);
+  const modelProfile = normalizeOutfitModelProfile(payload.modelProfile);
 
   if (!garments.length) {
     throw new Error("Please select at least one garment before generating the outfit preview.");
@@ -317,7 +421,7 @@ async function runOutfitPreview(user: AuthenticatedUser, payload: OutfitPreviewP
     throw new Error("referenceBoardDataUrl is required.");
   }
 
-  const prompt = buildOutfitPrompt(garments);
+  const prompt = buildOutfitPrompt(garments, modelProfile);
   const response = await fetchWithTimeout(
     `${VOLCENGINE_BASE_URL}/images/generations`,
     {
