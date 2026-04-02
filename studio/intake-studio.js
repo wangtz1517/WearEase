@@ -120,6 +120,34 @@ function syncIdleStatus() {
   }
 }
 
+async function getReadableInvokeErrorMessage(error, fallbackMessage) {
+  if (error?.context instanceof Response) {
+    try {
+      const payload = await error.context.clone().json();
+
+      if (payload?.error) {
+        return String(payload.error);
+      }
+
+      if (payload?.message) {
+        return String(payload.message);
+      }
+    } catch {
+      try {
+        const text = await error.context.clone().text();
+
+        if (text) {
+          return text;
+        }
+      } catch {
+        // Ignore response parsing failures and fall back to the generic message.
+      }
+    }
+  }
+
+  return error?.message || fallbackMessage;
+}
+
 function initializeSupabaseClient() {
   if (supabaseClient || !hasSupabaseConfig() || !window.supabase?.createClient) {
     return supabaseClient;
@@ -628,7 +656,7 @@ async function submitCurrentJob() {
     state.latestStandardUrl = "";
     clearCanvas(standardCanvas);
     syncArchivePreview();
-    updatePreviewStatus(error.message || "AI 处理失败，请稍后重试。");
+    updatePreviewStatus(await getReadableInvokeErrorMessage(error, "AI 处理失败，请稍后重试。"));
   } finally {
     setSubmitState(false);
   }

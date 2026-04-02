@@ -113,6 +113,10 @@ Optional CLI config:
 supabase/config.toml
 ```
 
+The `ai-intake` function is configured with `verify_jwt = false` because the project uses the newer
+publishable key format. Auth is still enforced inside the function by validating the `Authorization`
+header against Supabase Auth.
+
 Typical deployment flow:
 
 ```bash
