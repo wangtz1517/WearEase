@@ -349,6 +349,7 @@
             </div>
 
             <div class="outfit-studio-actions">
+              <button class="ghost-button inline-button" type="button" id="outfit-history-button">历史穿搭</button>
               <button class="secondary-button inline-button" type="button" id="outfit-load-button">AI 生成试穿图</button>
               <button class="ghost-button inline-button" type="button" id="outfit-reset-button">清空结果</button>
             </div>
@@ -501,6 +502,24 @@
           </div>
         </section>
       </section>
+
+      <div class="modal-backdrop" id="outfit-history-modal" hidden>
+        <div class="modal-panel outfit-history-modal" role="dialog" aria-modal="true" aria-labelledby="outfit-history-title">
+          <div class="section-head modal-head">
+            <div>
+              <p class="eyebrow">Outfit History</p>
+              <h3 id="outfit-history-title">历史穿搭</h3>
+            </div>
+            <button class="ghost-button modal-close" type="button" data-close-outfit-history>关闭</button>
+          </div>
+
+          <p class="outfit-history-lead">
+            每次生成成功的 AI 试穿图都会保存到云端。后面想回看同一套穿搭时，先来这里看历史，不必重复消耗生成次数。
+          </p>
+
+          <div class="outfit-history-track" id="outfit-history-track"></div>
+        </div>
+      </div>
 
       <div class="modal-backdrop" id="add-garment-modal" hidden>
         <div class="modal-panel add-garment-modal" role="dialog" aria-modal="true" aria-labelledby="add-garment-title">

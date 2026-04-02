@@ -134,6 +134,7 @@ const seasonFocusNodes = document.querySelectorAll("[data-season-focus-text]");
 const seasonKeepLists = document.querySelectorAll("[data-season-keep-list]");
 const seasonStoreLists = document.querySelectorAll("[data-season-store-list]");
 const outfitSelectorRows = document.querySelector("#outfit-selector-rows");
+const outfitHistoryButton = document.querySelector("#outfit-history-button");
 const outfitLoadButton = document.querySelector("#outfit-load-button");
 const outfitResetButton = document.querySelector("#outfit-reset-button");
 const outfitPreviewStatus = document.querySelector("#outfit-preview-status");
@@ -147,6 +148,9 @@ const outfitModelEthnicityInput = document.querySelector("#outfit-model-ethnicit
 const outfitPreviewLayers = Object.fromEntries(
   Array.from(document.querySelectorAll("[data-outfit-preview-layer]")).map((node) => [node.dataset.outfitPreviewLayer, node])
 );
+const outfitHistoryModal = document.querySelector("#outfit-history-modal");
+const outfitHistoryModalPanel = outfitHistoryModal ? outfitHistoryModal.querySelector(".modal-panel") : null;
+const outfitHistoryTrack = document.querySelector("#outfit-history-track");
 const wardrobeGrid = document.querySelector("#wardrobe-grid");
 const wardrobeSummaryCounts = document.querySelectorAll(".wardrobe-summary-strip strong");
 const detailName = document.querySelector("#detail-name");
@@ -191,6 +195,7 @@ let supabaseClient = null;
 const AI_INTAKE_CHANNEL_NAME = "atelier-archive-ai-intake";
 const AI_INTAKE_PENDING_GARMENT_KEY = "atelier-archive-ai-intake-pending-garment";
 const CUSTOM_GARMENTS_KEY = "atelier-archive-custom-garments";
+const OUTFIT_HISTORY_KEY = "atelier-archive-outfit-history";
 const WARDROBE_VIEW_KEY = "atelier-archive-wardrobe-view";
 const WARDROBE_VISIBLE_COLUMNS_KEY = "atelier-archive-wardrobe-visible-columns";
 const WARDROBE_TYPE_OPTIONS = [
@@ -271,11 +276,16 @@ const OUTFIT_REFERENCE_GRID_COLUMNS = 2;
 const OUTFIT_REFERENCE_CELL_GAP = 44;
 const OUTFIT_REFERENCE_MARGIN = 84;
 const OUTFIT_GENERATION_TIMEOUT_MS = 120_000;
+const OUTFIT_HISTORY_MANIFEST_FILENAME = "history.json";
+const OUTFIT_HISTORY_LIMIT = 48;
 let outfitDraftSelection = createEmptyOutfitSelection();
 let outfitAppliedSelection = createEmptyOutfitSelection();
 let isOutfitGenerating = false;
 let outfitGeneratedPreviewUrl = "";
 let outfitAppliedModelProfile = createDefaultOutfitModelProfile();
+let outfitHistoryItems = [];
+let isOutfitHistoryLoading = false;
+let lastOutfitHistoryTrigger = null;
 
 try {
   currentWardrobeView = window.localStorage.getItem(WARDROBE_VIEW_KEY) === "list" ? "list" : "board";
@@ -496,7 +506,7 @@ function setAuthBusy(isBusy) {
 }
 
 function syncBodyModalState() {
-  const hasOpenModal = [addGarmentModal, authModal].some((modal) => modal && !modal.hidden);
+  const hasOpenModal = [addGarmentModal, authModal, outfitHistoryModal].some((modal) => modal && !modal.hidden);
   document.body.classList.toggle("modal-open", hasOpenModal);
 }
 
@@ -579,6 +589,9 @@ function syncAuthUi() {
 
     button.disabled = isAuthSubmitting || !isConfigured;
   });
+
+  syncOutfitHistoryButton();
+  renderOutfitHistoryPanel();
 }
 
 function openAuthModal(trigger = null) {
@@ -962,6 +975,10 @@ function getTypeLabel(type) {
 
   if (type === "outer") {
     return "外套";
+  }
+
+  if (type === "dress") {
+    return "连衣裙";
   }
 
   if (type === "accessory") {
@@ -1442,6 +1459,396 @@ function getOutfitModelProfileSignature(profile = createDefaultOutfitModelProfil
   return JSON.stringify(normalized);
 }
 
+function getOutfitHistoryStorageKeyForUser(userId = "") {
+  return userId ? `${OUTFIT_HISTORY_KEY}:${userId}` : OUTFIT_HISTORY_KEY;
+}
+
+function getOutfitHistoryManifestPath(userId = "") {
+  return userId ? `${userId}/outfit-preview/history/${OUTFIT_HISTORY_MANIFEST_FILENAME}` : "";
+}
+
+function loadOutfitHistoryFromStorageKey(storageKey) {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.map(normalizeOutfitHistoryEntry).filter((entry) => entry.imageUrl) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveOutfitHistoryToStorageKey(storageKey, items) {
+  try {
+    const normalizedItems = items
+      .map(normalizeOutfitHistoryEntry)
+      .filter((entry) => entry.imageUrl)
+      .slice(0, OUTFIT_HISTORY_LIMIT);
+    window.localStorage.setItem(storageKey, JSON.stringify(normalizedItems));
+  } catch {
+    // Ignore local storage write failures.
+  }
+}
+
+function isStorageObjectMissingError(error) {
+  const sourceText = `${error?.message || ""} ${error?.statusCode || ""} ${error?.error || ""}`.toLowerCase();
+  return sourceText.includes("not found") || sourceText.includes("404") || sourceText.includes("object not found");
+}
+
+function getOutfitHistoryGenderLabel(gender) {
+  if (gender === "male") {
+    return "男";
+  }
+
+  if (gender === "female") {
+    return "女";
+  }
+
+  return "默认模特";
+}
+
+function getOutfitHistoryEthnicityLabel(ethnicity) {
+  if (ethnicity === "white") {
+    return "白人";
+  }
+
+  if (ethnicity === "black") {
+    return "黑人";
+  }
+
+  return "亚洲人";
+}
+
+function normalizeOutfitHistoryEntry(entry) {
+  const safeEntry = entry && typeof entry === "object" ? entry : {};
+  const garments = Array.isArray(safeEntry.garments)
+    ? safeEntry.garments
+      .map((item) => ({
+        id: String(item?.id || "").trim(),
+        name: String(item?.name || "").trim() || "未命名单品",
+        type: String(item?.type || "").trim() || "top",
+        categoryText: String(item?.categoryText || "").trim(),
+        color: String(item?.color || "").trim()
+      }))
+      .filter((item) => item.name)
+    : [];
+  const modelProfile = normalizeOutfitModelProfile(safeEntry.modelProfile);
+  const createdAt = String(safeEntry.createdAt || "").trim();
+
+  return {
+    id: String(safeEntry.id || `outfit-history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).trim(),
+    createdAt: createdAt || new Date().toISOString(),
+    imageUrl: String(safeEntry.imageUrl || "").trim(),
+    imagePath: String(safeEntry.imagePath || "").trim(),
+    garments,
+    modelProfile,
+    signature: String(safeEntry.signature || "").trim() || buildOutfitHistorySignature(garments, modelProfile)
+  };
+}
+
+function sortOutfitHistoryEntries(items = []) {
+  return items
+    .map(normalizeOutfitHistoryEntry)
+    .filter((entry) => entry.imageUrl)
+    .sort((left, right) => Date.parse(right.createdAt || "") - Date.parse(left.createdAt || ""));
+}
+
+function setOutfitHistoryItems(items = []) {
+  outfitHistoryItems = sortOutfitHistoryEntries(items).slice(0, OUTFIT_HISTORY_LIMIT);
+  renderOutfitHistoryPanel();
+  syncOutfitHistoryButton();
+}
+
+function buildOutfitHistorySignature(garments = [], modelProfile = createDefaultOutfitModelProfile()) {
+  const normalizedGarments = garments
+    .map((item) => ({
+      id: String(item?.id || "").trim(),
+      type: String(item?.type || "").trim(),
+      name: String(item?.name || "").trim()
+    }))
+    .sort((left, right) => `${left.type}:${left.id}:${left.name}`.localeCompare(`${right.type}:${right.id}:${right.name}`, "zh-Hans-CN"));
+
+  return JSON.stringify({
+    garments: normalizedGarments,
+    modelProfile: normalizeOutfitModelProfile(modelProfile)
+  });
+}
+
+function createOutfitHistoryEntry({ imageUrl, imagePath, garments, modelProfile }) {
+  const normalizedGarments = (garments || []).map((item) => ({
+    id: String(item?.id || "").trim(),
+    name: String(item?.name || "").trim() || "未命名单品",
+    type: String(item?.type || "").trim() || "top",
+    categoryText: String(item?.categoryText || "").trim(),
+    color: String(item?.color || "").trim()
+  }));
+  const normalizedModelProfile = normalizeOutfitModelProfile(modelProfile);
+
+  return normalizeOutfitHistoryEntry({
+    id: `outfit-history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    imageUrl: String(imageUrl || "").trim(),
+    imagePath: String(imagePath || "").trim(),
+    garments: normalizedGarments,
+    modelProfile: normalizedModelProfile,
+    signature: buildOutfitHistorySignature(normalizedGarments, normalizedModelProfile)
+  });
+}
+
+function formatOutfitHistoryTime(value) {
+  const timestamp = Date.parse(String(value || ""));
+
+  if (!Number.isFinite(timestamp)) {
+    return "刚刚生成";
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(timestamp));
+}
+
+function buildOutfitHistoryCardMarkup(entry) {
+  const garmentRows = entry.garments.length
+    ? entry.garments
+      .map((item) => `
+        <div class="outfit-history-row">
+          <strong>${escapeHtml(getTypeLabel(item.type))}</strong>
+          <span>${escapeHtml(item.name)}</span>
+        </div>
+      `)
+      .join("")
+    : `<div class="outfit-history-row"><strong>单品</strong><span>无记录</span></div>`;
+  const profileChips = [
+    getOutfitHistoryEthnicityLabel(entry.modelProfile.ethnicity),
+    getOutfitHistoryGenderLabel(entry.modelProfile.gender),
+    entry.modelProfile.heightCm ? `${entry.modelProfile.heightCm} cm` : "",
+    entry.modelProfile.weightKg ? `${entry.modelProfile.weightKg} kg` : ""
+  ]
+    .filter(Boolean)
+    .map((label) => `<span class="outfit-history-chip">${escapeHtml(label)}</span>`)
+    .join("");
+
+  return `
+    <article class="outfit-history-card">
+      <div class="outfit-history-image-shell">
+        <img class="outfit-history-image" src="${escapeHtml(entry.imageUrl)}" alt="历史穿搭效果图">
+      </div>
+      <div class="outfit-history-copy">
+        <div class="outfit-history-meta">
+          <strong>${escapeHtml(formatOutfitHistoryTime(entry.createdAt))}</strong>
+          <span>${escapeHtml(entry.garments.length ? `${entry.garments.length} 件单品` : "历史记录")}</span>
+        </div>
+        <div class="outfit-history-rows">${garmentRows}</div>
+        <div class="outfit-history-chip-row">${profileChips}</div>
+        <button class="ghost-button inline-button outfit-history-action" type="button" data-load-outfit-history="${escapeHtml(entry.id)}">载入到右侧</button>
+      </div>
+    </article>
+  `;
+}
+
+function syncOutfitHistoryButton() {
+  if (!outfitHistoryButton) {
+    return;
+  }
+
+  outfitHistoryButton.disabled = !hasSupabaseConfig();
+  outfitHistoryButton.textContent = outfitHistoryItems.length ? `历史穿搭 ${outfitHistoryItems.length}` : "历史穿搭";
+}
+
+function renderOutfitHistoryPanel() {
+  if (!outfitHistoryTrack) {
+    return;
+  }
+
+  if (!currentUser) {
+    outfitHistoryTrack.innerHTML = `
+      <article class="outfit-history-empty">
+        <strong>登录后可查看你的历史穿搭</strong>
+        <span>历史试穿图会按账号保存到云端，换电脑也能继续查看。</span>
+      </article>
+    `;
+    return;
+  }
+
+  if (isOutfitHistoryLoading && !outfitHistoryItems.length) {
+    outfitHistoryTrack.innerHTML = `
+      <article class="outfit-history-empty">
+        <strong>正在读取云端历史穿搭</strong>
+        <span>请稍候，系统正在拉取你之前生成过的 AI 试穿图。</span>
+      </article>
+    `;
+    return;
+  }
+
+  if (!outfitHistoryItems.length) {
+    outfitHistoryTrack.innerHTML = `
+      <article class="outfit-history-empty">
+        <strong>还没有历史穿搭</strong>
+        <span>生成过一次 AI 试穿图后，这里就会自动保存到云端。</span>
+      </article>
+    `;
+    return;
+  }
+
+  outfitHistoryTrack.innerHTML = outfitHistoryItems.map((entry) => buildOutfitHistoryCardMarkup(entry)).join("");
+}
+
+function openOutfitHistoryModal(trigger = null) {
+  if (!outfitHistoryModal) {
+    return;
+  }
+
+  if (trigger instanceof HTMLElement) {
+    lastOutfitHistoryTrigger = trigger;
+  }
+
+  outfitHistoryModal.hidden = false;
+  outfitHistoryModal.classList.add("is-open");
+  outfitHistoryModal.setAttribute("aria-hidden", "false");
+  syncBodyModalState();
+  renderOutfitHistoryPanel();
+}
+
+function closeOutfitHistoryModal() {
+  if (!outfitHistoryModal) {
+    return;
+  }
+
+  outfitHistoryModal.hidden = true;
+  outfitHistoryModal.classList.remove("is-open");
+  outfitHistoryModal.setAttribute("aria-hidden", "true");
+  syncBodyModalState();
+
+  if (lastOutfitHistoryTrigger instanceof HTMLElement) {
+    lastOutfitHistoryTrigger.focus();
+  }
+}
+
+async function fetchOutfitHistoryFromCloud() {
+  const client = await ensureSupabaseClient();
+
+  if (!client || !currentUser?.id) {
+    return [];
+  }
+
+  const { data, error } = await client.storage
+    .from(SUPABASE_BUCKET)
+    .download(getOutfitHistoryManifestPath(currentUser.id));
+
+  if (error) {
+    if (isStorageObjectMissingError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const text = await data.text();
+  const parsed = JSON.parse(text || "[]");
+  return Array.isArray(parsed) ? parsed.map(normalizeOutfitHistoryEntry).filter((entry) => entry.imageUrl) : [];
+}
+
+async function persistOutfitHistoryToCloud(items, userId = currentUser?.id || "") {
+  const client = await ensureSupabaseClient();
+
+  if (!client || !userId) {
+    return;
+  }
+
+  const payload = JSON.stringify(sortOutfitHistoryEntries(items).slice(0, OUTFIT_HISTORY_LIMIT), null, 2);
+  const blob = new Blob([payload], {
+    type: "application/json"
+  });
+  const { error } = await client.storage
+    .from(SUPABASE_BUCKET)
+    .upload(getOutfitHistoryManifestPath(userId), blob, {
+      upsert: true,
+      contentType: "application/json; charset=utf-8"
+    });
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function hydrateOutfitHistoryFromCloud() {
+  if (!currentUser?.id) {
+    setOutfitHistoryItems([]);
+    return;
+  }
+
+  const userId = currentUser.id;
+  const storageKey = getOutfitHistoryStorageKeyForUser(userId);
+  const cachedItems = loadOutfitHistoryFromStorageKey(storageKey);
+
+  if (cachedItems.length) {
+    setOutfitHistoryItems(cachedItems);
+  } else {
+    renderOutfitHistoryPanel();
+  }
+
+  isOutfitHistoryLoading = true;
+  renderOutfitHistoryPanel();
+
+  try {
+    const cloudItems = await fetchOutfitHistoryFromCloud();
+    setOutfitHistoryItems(cloudItems);
+    saveOutfitHistoryToStorageKey(storageKey, cloudItems);
+  } catch (error) {
+    console.error(error);
+    renderOutfitHistoryPanel();
+  } finally {
+    isOutfitHistoryLoading = false;
+    renderOutfitHistoryPanel();
+  }
+}
+
+function appendOutfitHistoryInBackground(entry, userId = currentUser?.id || "") {
+  if (!userId || !entry?.imageUrl) {
+    return;
+  }
+
+  const normalizedEntry = normalizeOutfitHistoryEntry(entry);
+  const nextItems = [
+    normalizedEntry,
+    ...outfitHistoryItems.filter((item) => item.signature !== normalizedEntry.signature && item.id !== normalizedEntry.id)
+  ].slice(0, OUTFIT_HISTORY_LIMIT);
+  const storageKey = getOutfitHistoryStorageKeyForUser(userId);
+
+  setOutfitHistoryItems(nextItems);
+  saveOutfitHistoryToStorageKey(storageKey, nextItems);
+
+  persistOutfitHistoryToCloud(nextItems, userId).catch((error) => {
+    console.error(error);
+  });
+}
+
+function loadOutfitHistoryEntry(entryId) {
+  const targetEntry = outfitHistoryItems.find((item) => item.id === entryId);
+
+  if (!targetEntry) {
+    return;
+  }
+
+  const nextSelection = createEmptyOutfitSelection();
+
+  targetEntry.garments.forEach((item) => {
+    if (Object.prototype.hasOwnProperty.call(nextSelection, item.type)) {
+      nextSelection[item.type] = item.id;
+    }
+  });
+
+  outfitDraftSelection = nextSelection;
+  outfitAppliedSelection = { ...nextSelection };
+  outfitAppliedModelProfile = normalizeOutfitModelProfile(targetEntry.modelProfile);
+  applyOutfitModelProfile(outfitAppliedModelProfile);
+  isOutfitGenerating = false;
+  setOutfitGeneratedPreview(targetEntry.imageUrl);
+  renderOutfitStudio();
+  closeOutfitHistoryModal();
+}
+
 function drawRoundedRect(context, x, y, width, height, radius) {
   if (typeof context.roundRect === "function") {
     context.beginPath();
@@ -1788,9 +2195,6 @@ function buildOutfitOptionVisualMarkup(item, slotKey) {
 function buildOutfitOptionCardMarkup(slot, item) {
   const itemId = item?.id || OUTFIT_SELECTION_NONE;
   const displayName = item?.name || `暂不穿${slot.label}`;
-  const metaText = item
-    ? getOutfitItemMetaText(item)
-    : "保留这一层为空，先只看其他单品的组合。";
 
   return `
     <button
@@ -1803,7 +2207,6 @@ function buildOutfitOptionCardMarkup(slot, item) {
       ${buildOutfitOptionVisualMarkup(item, slot.key)}
       <span class="outfit-option-copy">
         <strong>${escapeHtml(displayName)}</strong>
-        <span>${escapeHtml(metaText)}</span>
       </span>
     </button>
   `;
@@ -1820,9 +2223,7 @@ function buildOutfitSlotRowMarkup(slot, items) {
     <section class="outfit-slot-row" data-outfit-slot-row="${escapeHtml(slot.key)}">
       <div class="outfit-slot-head">
         <div class="outfit-slot-copy">
-          <p class="eyebrow">${escapeHtml(slot.eyebrow)}</p>
           <h4>${escapeHtml(slot.label)}</h4>
-          <p>${escapeHtml(slot.description)}</p>
         </div>
         <span class="outfit-slot-count">${escapeHtml(availabilityText)}</span>
       </div>
@@ -1880,7 +2281,9 @@ function renderOutfitPreviewLayer(slotKey, item) {
 function syncOutfitActionButtons(groupedItems) {
   const hasAnyGarments = OUTFIT_SLOT_CONFIG.some((slot) => (groupedItems[slot.key] || []).length > 0);
   const selectedCount = getSelectedOutfitGarments(outfitDraftSelection, groupedItems).length;
-  const hasDraftChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
+  const hasDraftSelectionChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
+  const hasDraftModelChanges = getOutfitModelProfileSignature(readOutfitModelProfile()) !== getOutfitModelProfileSignature(outfitAppliedModelProfile);
+  const hasDraftChanges = hasDraftSelectionChanges || hasDraftModelChanges;
   const hasAnySelection = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] || outfitAppliedSelection[slot.key]);
   const isAuthenticated = Boolean(currentUser && currentSession?.access_token);
   const canGenerate = hasAnyGarments && selectedCount > 0 && hasOutfitAiConfig() && isAuthenticated && !isOutfitGenerating;
@@ -2078,6 +2481,7 @@ async function generateAiOutfitPreview() {
     }
 
     const outputUrl = String(data?.output?.imageUrl || "").trim();
+    const outputPath = String(data?.output?.path || "").trim();
 
     if (!outputUrl) {
       throw new Error("AI 没有返回可用的试穿图。");
@@ -2088,6 +2492,15 @@ async function generateAiOutfitPreview() {
     };
     outfitAppliedModelProfile = modelProfile;
     setOutfitGeneratedPreview(outputUrl);
+    appendOutfitHistoryInBackground(
+      createOutfitHistoryEntry({
+        imageUrl: outputUrl,
+        imagePath: outputPath,
+        garments: selectedGarments,
+        modelProfile
+      }),
+      currentUser?.id || ""
+    );
     syncOutfitSelectionUi(groupedItems);
     syncOutfitPreview(groupedItems);
   } catch (error) {
@@ -2863,6 +3276,7 @@ async function initializeCloudFeatures() {
 
     if (currentUser) {
       await hydrateWardrobeFromCloud();
+      await hydrateOutfitHistoryFromCloud();
     }
   } catch (error) {
     handleCloudSyncError(error, "云端连接初始化失败，当前先继续使用本地缓存。");
@@ -2875,9 +3289,11 @@ async function initializeCloudFeatures() {
 
     if (currentUser) {
       void hydrateWardrobeFromCloud();
+      void hydrateOutfitHistoryFromCloud();
       return;
     }
 
+    setOutfitHistoryItems([]);
     renderCustomGarments();
     filterWardrobeCards();
   });
@@ -2959,6 +3375,10 @@ outfitSelectorRows?.addEventListener("click", (event) => {
   setOutfitDraftSelection(slotKey, itemId);
 });
 
+outfitHistoryButton?.addEventListener("click", () => {
+  openOutfitHistoryModal(outfitHistoryButton);
+});
+
 outfitLoadButton?.addEventListener("click", () => {
   void generateAiOutfitPreview();
 });
@@ -2983,6 +3403,20 @@ outfitResetButton?.addEventListener("click", () => {
     applyOutfitModelProfile(profile);
     syncOutfitPreview(groupGarmentsByOutfitSlot());
   });
+});
+
+outfitHistoryTrack?.addEventListener("click", (event) => {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const button = event.target.closest("[data-load-outfit-history]");
+
+  if (!button) {
+    return;
+  }
+
+  loadOutfitHistoryEntry(button.dataset.loadOutfitHistory || "");
 });
 
 if (wardrobeGrid) {
@@ -3355,6 +3789,13 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const closeOutfitHistoryTrigger = target.closest("[data-close-outfit-history]");
+  if (closeOutfitHistoryTrigger) {
+    event.preventDefault();
+    closeOutfitHistoryModal();
+    return;
+  }
+
   if (addGarmentModal && !addGarmentModal.hidden) {
     const clickedBackdrop = target === addGarmentModal;
     const clickedInsidePanel = addGarmentModalPanel instanceof Element && addGarmentModalPanel.contains(target);
@@ -3371,6 +3812,16 @@ document.addEventListener("click", (event) => {
 
     if (clickedBackdrop && !clickedInsidePanel) {
       closeAuthModal();
+      return;
+    }
+  }
+
+  if (outfitHistoryModal && !outfitHistoryModal.hidden) {
+    const clickedBackdrop = target === outfitHistoryModal;
+    const clickedInsidePanel = outfitHistoryModalPanel instanceof Element && outfitHistoryModalPanel.contains(target);
+
+    if (clickedBackdrop && !clickedInsidePanel) {
+      closeOutfitHistoryModal();
       return;
     }
   }
@@ -3393,6 +3844,10 @@ document.addEventListener("keydown", (event) => {
 
   if (event.key === "Escape" && authModal && !authModal.hidden) {
     closeAuthModal();
+  }
+
+  if (event.key === "Escape" && outfitHistoryModal && !outfitHistoryModal.hidden) {
+    closeOutfitHistoryModal();
   }
 });
 

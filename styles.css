@@ -2760,14 +2760,14 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
 .outfit-selector-rows {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .outfit-slot-row {
   display: grid;
-  gap: 10px;
-  padding: 16px;
-  border-radius: 22px;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 251, 246, 0.92), rgba(248, 241, 232, 0.84));
   border: 1px solid rgba(71, 46, 29, 0.08);
 }
@@ -2780,8 +2780,9 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 }
 
 .outfit-slot-copy {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
 }
 
 .outfit-slot-copy h4 {
@@ -2789,20 +2790,14 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
   font-size: 1rem;
 }
 
-.outfit-slot-copy p {
-  margin: 0;
-  color: var(--ink-soft);
-  line-height: 1.55;
-}
-
 .outfit-slot-count {
   flex: 0 0 auto;
   align-self: center;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: 999px;
   background: rgba(79, 64, 53, 0.06);
   color: var(--ink-soft);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .outfit-slot-scroll {
@@ -2834,7 +2829,7 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 .outfit-slot-track {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(150px, 180px);
+  grid-auto-columns: minmax(138px, 164px);
   gap: 12px;
   overflow-x: auto;
   padding-bottom: 4px;
@@ -2850,11 +2845,11 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 .outfit-option-card {
   position: relative;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   align-content: start;
-  min-height: 220px;
-  padding: 12px;
-  border-radius: 18px;
+  min-height: 176px;
+  padding: 10px;
+  border-radius: 16px;
   border: 1px solid rgba(71, 46, 29, 0.08);
   background: rgba(255, 255, 255, 0.86);
   text-align: left;
@@ -2895,42 +2890,40 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 .outfit-option-visual {
   display: grid;
   place-items: center;
-  min-height: 124px;
-  padding: 8px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(252, 249, 245, 0.96), rgba(241, 233, 222, 0.88));
+  min-height: 118px;
+  padding: 0;
+  border-radius: 12px;
+  background: transparent;
   overflow: hidden;
 }
 
 .outfit-option-photo {
   display: block;
   width: 100%;
-  height: 108px;
+  height: 112px;
   object-fit: contain;
   filter: drop-shadow(0 10px 18px rgba(52, 38, 28, 0.12));
 }
 
 .outfit-option-card .garment-figure {
   width: 100%;
-  max-width: 98px;
-  height: 108px;
+  max-width: 96px;
+  height: 112px;
   margin: 0;
 }
 
 .outfit-option-copy {
-  display: grid;
-  gap: 4px;
+  display: block;
 }
 
 .outfit-option-copy strong {
+  display: block;
   font-size: 0.96rem;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .outfit-option-copy span {
-  color: var(--ink-soft);
-  font-size: 0.82rem;
-  line-height: 1.55;
+  display: none;
 }
 
 .outfit-empty-state {
@@ -3048,6 +3041,134 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
   color: var(--ink-soft);
   font-size: 0.84rem;
   pointer-events: none;
+}
+
+.outfit-history-modal {
+  width: min(1120px, 100%);
+}
+
+.outfit-history-lead {
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+
+.outfit-history-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 320px);
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.outfit-history-track::-webkit-scrollbar {
+  display: none;
+}
+
+.outfit-history-card,
+.outfit-history-empty {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(71, 46, 29, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+  scroll-snap-align: start;
+}
+
+.outfit-history-empty {
+  min-height: 180px;
+  align-content: center;
+}
+
+.outfit-history-empty strong {
+  font-size: 1rem;
+}
+
+.outfit-history-empty span {
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.outfit-history-image-shell {
+  overflow: hidden;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(252, 249, 245, 0.96), rgba(241, 233, 222, 0.88));
+}
+
+.outfit-history-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.outfit-history-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.outfit-history-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.outfit-history-meta strong {
+  font-size: 0.96rem;
+}
+
+.outfit-history-meta span {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.outfit-history-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.outfit-history-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.outfit-history-row strong {
+  font-size: 0.82rem;
+  color: var(--wood-dark);
+}
+
+.outfit-history-row span {
+  color: var(--ink-soft);
+  line-height: 1.5;
+  font-size: 0.86rem;
+}
+
+.outfit-history-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outfit-history-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(79, 64, 53, 0.06);
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.outfit-history-action {
+  justify-self: start;
 }
 
 .outfit-preview-canvas {
@@ -3309,6 +3430,10 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
   .outfit-model-grid {
     grid-template-columns: 1fr;
+  }
+
+  .outfit-history-track {
+    grid-auto-columns: minmax(240px, 82vw);
   }
 }
 
