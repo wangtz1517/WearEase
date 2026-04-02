@@ -152,14 +152,10 @@ const SUPABASE_URL = String(APP_CONFIG.supabaseUrl || "").trim();
 const SUPABASE_ANON_KEY = String(APP_CONFIG.supabaseAnonKey || "").trim();
 const SUPABASE_BUCKET = String(APP_CONFIG.supabaseBucket || "garment-images").trim();
 const SITE_URL = String(APP_CONFIG.siteUrl || "").trim();
-const supabaseClient = SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase?.createClient
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true
-      }
-    })
-  : null;
+const SUPABASE_CDN_URLS = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+  "https://unpkg.com/@supabase/supabase-js@2"
+];
 
 let currentView = "home";
 let currentSeason = "spring";
@@ -173,6 +169,10 @@ let currentSession = null;
 let currentUser = null;
 let isCloudSyncLoading = false;
 let isAuthSubmitting = false;
+let isSupabaseScriptLoading = false;
+let supabaseScriptLoadPromise = null;
+let supabaseLoadErrorMessage = "";
+let supabaseClient = null;
 const CUSTOM_GARMENTS_KEY = "atelier-archive-custom-garments";
 const WARDROBE_VIEW_KEY = "atelier-archive-wardrobe-view";
 const WARDROBE_VISIBLE_COLUMNS_KEY = "atelier-archive-wardrobe-visible-columns";
@@ -293,7 +293,79 @@ function getSiteUrl() {
 }
 
 function hasSupabaseConfig() {
-  return Boolean(supabaseClient);
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
+function initializeSupabaseClient() {
+  if (supabaseClient || !hasSupabaseConfig() || !window.supabase?.createClient) {
+    return supabaseClient;
+  }
+
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true
+    }
+  });
+
+  return supabaseClient;
+}
+
+function loadExternalScript(url) {
+  return new Promise((resolve, reject) => {
+    if (window.supabase?.createClient) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load ${url}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureSupabaseClient() {
+  if (!hasSupabaseConfig()) {
+    return null;
+  }
+
+  if (initializeSupabaseClient()) {
+    supabaseLoadErrorMessage = "";
+    return supabaseClient;
+  }
+
+  if (supabaseScriptLoadPromise) {
+    return supabaseScriptLoadPromise;
+  }
+
+  isSupabaseScriptLoading = true;
+  supabaseScriptLoadPromise = (async () => {
+    for (const url of SUPABASE_CDN_URLS) {
+      try {
+        await loadExternalScript(url);
+
+        if (initializeSupabaseClient()) {
+          supabaseLoadErrorMessage = "";
+          return supabaseClient;
+        }
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+
+    supabaseLoadErrorMessage = "Supabase SDK 加载失败，当前网络可能拦截了外部脚本。";
+    return null;
+  })();
+
+  try {
+    return await supabaseScriptLoadPromise;
+  } finally {
+    isSupabaseScriptLoading = false;
+    supabaseScriptLoadPromise = null;
+  }
 }
 
 function canSyncWardrobeToCloud() {
@@ -357,7 +429,7 @@ function setAuthBusy(isBusy) {
   authEmailInput?.toggleAttribute("disabled", isBusy);
   authPasswordInput?.toggleAttribute("disabled", isBusy);
   authForm?.querySelectorAll("button").forEach((button) => {
-    button.disabled = isBusy || (!hasSupabaseConfig() && button.type !== "button");
+    button.disabled = isBusy;
   });
 }
 
@@ -369,6 +441,14 @@ function syncBodyModalState() {
 function getAuthSummaryText() {
   if (!hasSupabaseConfig()) {
     return "还没有配置 Supabase，请先填写 public-config.js 中的项目地址和 anon key。";
+  }
+
+  if (supabaseLoadErrorMessage) {
+    return supabaseLoadErrorMessage;
+  }
+
+  if (isSupabaseScriptLoading) {
+    return "正在连接 Supabase 服务，请稍等。";
   }
 
   if (isCloudSyncLoading) {
@@ -387,11 +467,19 @@ function syncAuthUi() {
   const isLoggedIn = Boolean(currentUser?.email);
   const title = !isConfigured
     ? "云端未配置"
+    : supabaseLoadErrorMessage
+      ? "云端连接失败"
+      : isSupabaseScriptLoading
+        ? "云端连接中"
     : isLoggedIn
       ? "云端已连接"
       : "等待登录";
   const copy = !isConfigured
     ? "先配置 Supabase 后，才能注册账号、保存个人衣柜和上传信息。"
+    : supabaseLoadErrorMessage
+      ? supabaseLoadErrorMessage
+      : isSupabaseScriptLoading
+        ? "正在加载云端 SDK，如果当前网络拦截外部脚本会导致稍后不可用。"
     : isCloudSyncLoading
       ? "正在从云端同步你的衣柜数据。"
       : isLoggedIn
@@ -1323,8 +1411,9 @@ function getFileExtensionFromMimeType(mimeType) {
 
 async function maybeUploadGarmentImage(item, userId = currentUser?.id || "") {
   const normalized = normalizeCustomGarment(item);
+  const client = initializeSupabaseClient();
 
-  if (!supabaseClient || !userId || !normalized.imageDataUrl?.startsWith("data:image/")) {
+  if (!client || !userId || !normalized.imageDataUrl?.startsWith("data:image/")) {
     if (isLocalDevUrl(normalized.imageUrl)) {
       return normalizeCustomGarment({
         ...normalized,
@@ -1339,7 +1428,7 @@ async function maybeUploadGarmentImage(item, userId = currentUser?.id || "") {
   const blob = await response.blob();
   const extension = getFileExtensionFromMimeType(blob.type);
   const storagePath = `${userId}/${normalized.id}.${extension}`;
-  const { error } = await supabaseClient.storage.from(SUPABASE_BUCKET).upload(storagePath, blob, {
+  const { error } = await client.storage.from(SUPABASE_BUCKET).upload(storagePath, blob, {
     upsert: true,
     contentType: blob.type || "image/png"
   });
@@ -1348,7 +1437,7 @@ async function maybeUploadGarmentImage(item, userId = currentUser?.id || "") {
     throw error;
   }
 
-  const { data } = supabaseClient.storage.from(SUPABASE_BUCKET).getPublicUrl(storagePath);
+  const { data } = client.storage.from(SUPABASE_BUCKET).getPublicUrl(storagePath);
 
   return normalizeCustomGarment({
     ...normalized,
@@ -1358,12 +1447,14 @@ async function maybeUploadGarmentImage(item, userId = currentUser?.id || "") {
 }
 
 async function upsertGarmentInCloud(item, userId = currentUser?.id || "") {
-  if (!supabaseClient || !userId) {
+  const client = await ensureSupabaseClient();
+
+  if (!client || !userId) {
     return normalizeCustomGarment(item);
   }
 
   const prepared = await maybeUploadGarmentImage(item, userId);
-  const { data, error } = await supabaseClient
+  const { data, error } = await client
     .from("garments")
     .upsert(buildCloudGarmentRecord(prepared, userId))
     .select("*")
@@ -1377,11 +1468,13 @@ async function upsertGarmentInCloud(item, userId = currentUser?.id || "") {
 }
 
 async function removeGarmentFromCloud(id) {
-  if (!supabaseClient || !currentUser?.id) {
+  const client = await ensureSupabaseClient();
+
+  if (!client || !currentUser?.id) {
     return;
   }
 
-  const { error } = await supabaseClient.from("garments").delete().eq("id", id);
+  const { error } = await client.from("garments").delete().eq("id", id);
 
   if (error) {
     throw error;
@@ -1389,11 +1482,13 @@ async function removeGarmentFromCloud(id) {
 }
 
 async function fetchCloudGarments() {
-  if (!supabaseClient || !currentUser?.id) {
+  const client = await ensureSupabaseClient();
+
+  if (!client || !currentUser?.id) {
     return [];
   }
 
-  const { data, error } = await supabaseClient
+  const { data, error } = await client
     .from("garments")
     .select("*")
     .order("updated_at", { ascending: false });
@@ -1786,7 +1881,7 @@ function renderSearchResults(query) {
 }
 
 async function signInWithEmailPassword() {
-  if (!supabaseClient) {
+  if (!hasSupabaseConfig()) {
     setAuthFeedback("还没有配置 Supabase，请先填写 public-config.js。", "error");
     return;
   }
@@ -1802,7 +1897,13 @@ async function signInWithEmailPassword() {
   setAuthFeedback("");
 
   try {
-    const { error } = await supabaseClient.auth.signInWithPassword({
+    const client = await ensureSupabaseClient();
+
+    if (!client) {
+      throw new Error(supabaseLoadErrorMessage || "Supabase SDK 加载失败，请稍后重试。");
+    }
+
+    const { error } = await client.auth.signInWithPassword({
       email,
       password
     });
@@ -1821,7 +1922,7 @@ async function signInWithEmailPassword() {
 }
 
 async function signUpWithEmailPassword() {
-  if (!supabaseClient) {
+  if (!hasSupabaseConfig()) {
     setAuthFeedback("还没有配置 Supabase，请先填写 public-config.js。", "error");
     return;
   }
@@ -1837,7 +1938,13 @@ async function signUpWithEmailPassword() {
   setAuthFeedback("");
 
   try {
-    const { data, error } = await supabaseClient.auth.signUp({
+    const client = await ensureSupabaseClient();
+
+    if (!client) {
+      throw new Error(supabaseLoadErrorMessage || "Supabase SDK 加载失败，请稍后重试。");
+    }
+
+    const { data, error } = await client.auth.signUp({
       email,
       password,
       options: {
@@ -1864,7 +1971,9 @@ async function signUpWithEmailPassword() {
 }
 
 async function signOutCurrentUser() {
-  if (!supabaseClient) {
+  const client = await ensureSupabaseClient();
+
+  if (!client) {
     closeAuthModal();
     return;
   }
@@ -1873,7 +1982,7 @@ async function signOutCurrentUser() {
   setAuthFeedback("");
 
   try {
-    const { error } = await supabaseClient.auth.signOut();
+    const { error } = await client.auth.signOut();
 
     if (error) {
       throw error;
@@ -1891,12 +2000,19 @@ async function signOutCurrentUser() {
 async function initializeCloudFeatures() {
   syncAuthUi();
 
-  if (!supabaseClient) {
+  if (!hasSupabaseConfig()) {
     return;
   }
 
   try {
-    const { data, error } = await supabaseClient.auth.getSession();
+    const client = await ensureSupabaseClient();
+
+    if (!client) {
+      syncAuthUi();
+      return;
+    }
+
+    const { data, error } = await client.auth.getSession();
 
     if (error) {
       throw error;
