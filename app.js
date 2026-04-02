@@ -1409,23 +1409,45 @@ function getFileExtensionFromMimeType(mimeType) {
   return "png";
 }
 
+function shouldUploadGarmentImage(normalized) {
+  return Boolean(
+    normalized.imageDataUrl?.startsWith("data:image/")
+      || isLocalDevUrl(normalized.imageUrl)
+  );
+}
+
+async function getGarmentImageBlob(normalized) {
+  const imageSource = normalized.imageDataUrl?.startsWith("data:image/")
+    ? normalized.imageDataUrl
+    : normalized.imageUrl;
+
+  if (!imageSource) {
+    return null;
+  }
+
+  const response = await fetch(imageSource);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch garment image: ${response.status}`);
+  }
+
+  return response.blob();
+}
+
 async function maybeUploadGarmentImage(item, userId = currentUser?.id || "") {
   const normalized = normalizeCustomGarment(item);
   const client = initializeSupabaseClient();
 
-  if (!client || !userId || !normalized.imageDataUrl?.startsWith("data:image/")) {
-    if (isLocalDevUrl(normalized.imageUrl)) {
-      return normalizeCustomGarment({
-        ...normalized,
-        imageUrl: ""
-      });
-    }
-
+  if (!client || !userId || !shouldUploadGarmentImage(normalized)) {
     return normalized;
   }
 
-  const response = await fetch(normalized.imageDataUrl);
-  const blob = await response.blob();
+  const blob = await getGarmentImageBlob(normalized);
+
+  if (!blob) {
+    return normalized;
+  }
+
   const extension = getFileExtensionFromMimeType(blob.type);
   const storagePath = `${userId}/${normalized.id}.${extension}`;
   const { error } = await client.storage.from(SUPABASE_BUCKET).upload(storagePath, blob, {
