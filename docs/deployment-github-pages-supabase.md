@@ -64,11 +64,10 @@ Notes:
 
 - `supabaseAnonKey` is the public browser key.
 - Never put `service_role` into `public-config.js`.
-- `aiServiceBaseUrl` is no longer required for the web AI flow.
 
 ## 4. Edge Function Secrets
 
-The AI workflow now uses a Supabase Edge Function instead of the local `127.0.0.1` service.
+The AI workflow is served by a Supabase Edge Function.
 
 Required secrets are listed in:
 
@@ -147,13 +146,3 @@ This means:
 - cross-device AI usage is supported after the function is deployed
 - your local computer does not need to stay online
 - the Volcengine API key stays server-side
-
-## 7. Local Legacy Service
-
-The old local service still exists in:
-
-```text
-ai-intake-service/
-```
-
-But it is no longer required for GitHub Pages production usage.

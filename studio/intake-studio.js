@@ -22,6 +22,8 @@ const importButton = document.querySelector("#import-button");
 
 const uploadEmpty = document.querySelector("#upload-empty");
 const processingOverlay = document.querySelector("#processing-overlay");
+const processingTitle = document.querySelector(".processing-title");
+const processingCopy = document.querySelector(".processing-copy");
 const sourceCanvas = document.querySelector("#source-canvas");
 const standardCanvas = document.querySelector("#standard-canvas");
 const previewStatus = document.querySelector("#preview-status");
@@ -78,6 +80,8 @@ let supabaseClient = null;
 let supabaseScriptLoadPromise = null;
 let supabaseLoadErrorMessage = "";
 let hasBoundAuthStateListener = false;
+let processingStageIntervalId = 0;
+let processingStageTimeoutId = 0;
 
 const aiIntakeChannel = "BroadcastChannel" in window ? new BroadcastChannel(AI_INTAKE_CHANNEL_NAME) : null;
 
@@ -93,6 +97,78 @@ function updatePreviewStatus(text) {
   if (previewStatus) {
     previewStatus.textContent = text;
   }
+}
+
+function updateProcessingOverlay(title, copy) {
+  if (processingTitle) {
+    processingTitle.textContent = title;
+  }
+
+  if (processingCopy) {
+    processingCopy.textContent = copy;
+  }
+}
+
+function stopProcessingProgress() {
+  if (processingStageIntervalId) {
+    window.clearInterval(processingStageIntervalId);
+    processingStageIntervalId = 0;
+  }
+
+  if (processingStageTimeoutId) {
+    window.clearTimeout(processingStageTimeoutId);
+    processingStageTimeoutId = 0;
+  }
+}
+
+function startProcessingProgress() {
+  stopProcessingProgress();
+
+  const stages = [
+    {
+      title: "正在上传原图",
+      copy: "图片会先压缩后发送到云端，通常只需几秒。"
+    },
+    {
+      title: "正在识别衣物主体",
+      copy: "云端正在分析服装边界、轮廓和背景。"
+    },
+    {
+      title: "正在生成归档图",
+      copy: "AI 正在清理背景，并整理成更适合衣柜展示的标准图。"
+    },
+    {
+      title: "正在回传结果",
+      copy: "快完成了，系统正在整理结果并返回当前页面。"
+    }
+  ];
+
+  let stageIndex = 0;
+
+  const renderStage = () => {
+    const stage = stages[Math.min(stageIndex, stages.length - 1)];
+    updateProcessingOverlay(stage.title, stage.copy);
+  };
+
+  renderStage();
+
+  processingStageIntervalId = window.setInterval(() => {
+    if (stageIndex >= stages.length - 1) {
+      window.clearInterval(processingStageIntervalId);
+      processingStageIntervalId = 0;
+      return;
+    }
+
+    stageIndex += 1;
+    renderStage();
+  }, 3200);
+
+  processingStageTimeoutId = window.setTimeout(() => {
+    updateProcessingOverlay(
+      "处理时间比平时更长",
+      "云端仍在继续处理。如果等待超过 90 秒，页面会自动提示超时。"
+    );
+  }, 16_000);
 }
 
 function getIdleStatusText() {
@@ -136,23 +212,25 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
 }
 
 async function getReadableInvokeErrorMessage(error, fallbackMessage) {
+  let rawMessage = "";
+
   if (error?.context instanceof Response) {
     try {
       const payload = await error.context.clone().json();
 
       if (payload?.error) {
-        return String(payload.error);
+        rawMessage = String(payload.error);
       }
 
-      if (payload?.message) {
-        return String(payload.message);
+      if (!rawMessage && payload?.message) {
+        rawMessage = String(payload.message);
       }
     } catch {
       try {
         const text = await error.context.clone().text();
 
-        if (text) {
-          return text;
+        if (!rawMessage && text) {
+          rawMessage = text;
         }
       } catch {
         // Ignore response parsing failures and fall back to the generic message.
@@ -160,7 +238,88 @@ async function getReadableInvokeErrorMessage(error, fallbackMessage) {
     }
   }
 
-  return error?.message || fallbackMessage;
+  if (!rawMessage && error?.message) {
+    rawMessage = String(error.message);
+  }
+
+  return mapAiErrorMessage(rawMessage, fallbackMessage);
+}
+
+function mapAiErrorMessage(message, fallbackMessage) {
+  const normalizedMessage = String(message || "").trim();
+  const lowerMessage = normalizedMessage.toLowerCase();
+
+  if (!normalizedMessage) {
+    return fallbackMessage;
+  }
+
+  if (
+    lowerMessage.includes("your session is invalid")
+    || lowerMessage.includes("please sign in again")
+    || lowerMessage.includes("auth session missing")
+    || lowerMessage.includes("invalid jwt")
+  ) {
+    return "登录状态已失效，请刷新页面后重新登录再试。";
+  }
+
+  if (lowerMessage.includes("timed out") || normalizedMessage.includes("超时")) {
+    return "AI 处理超时。建议换一张更小、更清晰的图片，或稍后再试。";
+  }
+
+  if (
+    lowerMessage.includes("at least 14px")
+    || lowerMessage.includes("24x24")
+    || lowerMessage.includes("too small")
+    || normalizedMessage.includes("图片尺寸太小")
+  ) {
+    return "图片尺寸太小。请换一张更清晰、更大的衣物图片。";
+  }
+
+  if (
+    lowerMessage.includes("payload too large")
+    || lowerMessage.includes("request entity too large")
+    || lowerMessage.includes("request body is too large")
+    || lowerMessage.includes("too large")
+    || normalizedMessage.includes("图片过大")
+  ) {
+    return "图片过大。建议先裁剪衣物主体，或换一张更小的图片再试。";
+  }
+
+  if (
+    lowerMessage.includes("did not include a generated image")
+    || normalizedMessage.includes("没有返回可用结果图")
+  ) {
+    return "AI 没有返回可用结果图。请换一张主体更清晰的图片再试。";
+  }
+
+  if (
+    lowerMessage.includes("failed to upload ai output image")
+    || normalizedMessage.includes("结果图上传失败")
+  ) {
+    return "AI 已处理完成，但结果图上传失败。请稍后重试。";
+  }
+
+  if (lowerMessage.includes("edge function returned a non-2xx status code")) {
+    return "云端函数执行失败，请稍后重试。";
+  }
+
+  if (
+    lowerMessage.includes("failed to load https://")
+    || lowerMessage.includes("supabase sdk")
+    || normalizedMessage.includes("Supabase SDK")
+  ) {
+    return "云端连接失败，请检查当前网络后重试。";
+  }
+
+  if (
+    lowerMessage.includes("volcengine")
+    || lowerMessage.includes("invalidparameter")
+    || lowerMessage.includes("invalid request")
+  ) {
+    return "AI 服务返回异常：" + normalizedMessage;
+  }
+
+  return normalizedMessage || fallbackMessage;
 }
 
 function initializeSupabaseClient() {
@@ -544,6 +703,10 @@ function setCategory(category) {
 function setSubmitState(isSubmitting) {
   state.isSubmitting = isSubmitting;
 
+  if (!isSubmitting) {
+    stopProcessingProgress();
+  }
+
   const canProcess = Boolean(state.sourceDataUrl && currentUser && hasSupabaseConfig() && !isSubmitting);
 
   if (processButton) {
@@ -635,6 +798,7 @@ async function submitCurrentJob() {
   }
 
   setSubmitState(true);
+  startProcessingProgress();
   updatePreviewStatus("AI 正在处理图片，请稍候...");
   state.latestStandardUrl = "";
   clearCanvas(standardCanvas);
