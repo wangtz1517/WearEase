@@ -355,6 +355,64 @@ button {
   padding-top: 10px;
 }
 
+.sidebar-cloud-card {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 248, 239, 0.08);
+  border: 1px solid rgba(255, 248, 239, 0.1);
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 220ms ease, max-height 220ms ease, transform 220ms ease, visibility 0s linear 220ms;
+}
+
+.sidebar:hover .sidebar-cloud-card,
+.sidebar:focus-within .sidebar-cloud-card {
+  opacity: 1;
+  max-height: 220px;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 60ms;
+}
+
+.sidebar-cloud-card .eyebrow {
+  color: rgba(255, 245, 234, 0.68);
+}
+
+.sidebar-cloud-card strong {
+  color: #fff7ee;
+  font-size: 1rem;
+}
+
+.sidebar-cloud-card p {
+  margin: 0;
+  color: rgba(255, 245, 234, 0.82);
+  line-height: 1.6;
+}
+
+.sidebar-cloud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sidebar-cloud-actions .inline-button {
+  min-height: 38px;
+  padding: 0 12px;
+  border-color: rgba(255, 248, 239, 0.18);
+  color: rgba(255, 245, 234, 0.92);
+}
+
+.sidebar-cloud-actions .inline-button:hover {
+  border-color: rgba(255, 248, 239, 0.28);
+  color: #fff9f1;
+}
+
 .menu-mini {
   display: grid;
   place-items: center;
@@ -1503,6 +1561,96 @@ button {
   white-space: nowrap;
 }
 
+.wardrobe-column-picker {
+  position: relative;
+}
+
+.wardrobe-column-toggle {
+  min-width: 120px;
+}
+
+.wardrobe-column-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 20;
+  width: min(360px, calc(100vw - 64px));
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(71, 46, 29, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 252, 248, 0.96);
+  box-shadow: 0 20px 40px rgba(52, 38, 28, 0.14);
+  backdrop-filter: blur(18px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 180ms ease, transform 180ms ease, visibility 180ms ease;
+}
+
+.wardrobe-column-picker.is-open .wardrobe-column-popover {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.wardrobe-column-popover-head {
+  display: grid;
+  gap: 4px;
+}
+
+.wardrobe-column-popover-head strong {
+  font-size: 0.96rem;
+}
+
+.wardrobe-column-popover-head span {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.wardrobe-column-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wardrobe-column-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(71, 46, 29, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.wardrobe-column-option:hover {
+  border-color: rgba(159, 119, 88, 0.24);
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateY(-1px);
+}
+
+.wardrobe-column-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #8c6b50;
+}
+
+.wardrobe-column-option span {
+  flex: 1 1 auto;
+  font-size: 0.88rem;
+}
+
 .shop-tab {
   position: relative;
   padding: 0 0 10px;
@@ -1921,6 +2069,10 @@ button {
   width: min(1180px, 100%);
 }
 
+.auth-modal {
+  width: min(820px, 100%);
+}
+
 .modal-head {
   align-items: center;
 }
@@ -1966,6 +2118,100 @@ button {
   color: var(--ink-soft);
   line-height: 1.65;
   max-width: 34ch;
+}
+
+.auth-modal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 22px;
+  margin-top: 12px;
+}
+
+.auth-modal-copy {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(244, 234, 219, 0.9), rgba(252, 246, 239, 0.88));
+  border: 1px solid rgba(71, 46, 29, 0.08);
+}
+
+.auth-modal-lead {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.7;
+}
+
+.auth-modal-points {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-field span {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid rgba(71, 46, 29, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  font: inherit;
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: rgba(95, 103, 95, 0.3);
+  box-shadow: 0 0 0 3px rgba(126, 134, 124, 0.1);
+}
+
+.auth-form-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.auth-feedback {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(95, 103, 95, 0.08);
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.auth-feedback[data-tone="error"] {
+  background: rgba(152, 76, 54, 0.1);
+  color: #7a3e2a;
+}
+
+.auth-feedback[data-tone="success"] {
+  background: rgba(94, 123, 94, 0.12);
+  color: #496147;
+}
+
+.auth-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .embedded-intake-panel {
@@ -3038,6 +3284,14 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
     margin-top: 12px;
   }
 
+  .sidebar-cloud-card {
+    opacity: 1;
+    max-height: none;
+    visibility: visible;
+    overflow: visible;
+    transform: none;
+  }
+
   .main-content {
     padding: 24px 36px 30px;
     margin-left: 0;
@@ -3101,8 +3355,30 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
     justify-content: flex-start;
   }
 
+  .wardrobe-column-picker {
+    width: 100%;
+  }
+
+  .wardrobe-column-toggle {
+    width: 100%;
+  }
+
+  .wardrobe-column-popover {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
+
+  .wardrobe-column-grid {
+    grid-template-columns: 1fr;
+  }
+
   .shop-tab-tools .wardrobe-search-shell {
     width: 100%;
+  }
+
+  .auth-modal-layout {
+    grid-template-columns: 1fr;
   }
 
   .wardrobe-list-row-head {
@@ -3187,6 +3463,16 @@ body.add-view-active .page-view[data-view="add"] .embedded-intake-panel {
 
   .main-content {
     padding: 16px 18px 18px;
+  }
+
+  .auth-action-row,
+  .sidebar-cloud-actions {
+    flex-direction: column;
+  }
+
+  .auth-action-row .inline-button,
+  .sidebar-cloud-actions .inline-button {
+    width: 100%;
   }
 
   .closet-scene {

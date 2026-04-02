@@ -49,14 +49,24 @@
       </nav>
 
       <div class="sidebar-aux">
-        <button class="sidebar-utility-link" type="button" aria-label="个人">
+        <button class="sidebar-utility-link" type="button" aria-label="账号与云端" data-open-auth-modal>
           <span class="menu-mini">◎</span>
-          <span class="menu-full">个人</span>
+          <span class="menu-full" id="auth-trigger-label">账号与云端</span>
         </button>
         <button class="sidebar-utility-link" type="button" aria-label="设置">
           <span class="menu-mini">⚙</span>
           <span class="menu-full">设置</span>
         </button>
+
+        <section class="sidebar-cloud-card" aria-live="polite">
+          <p class="eyebrow">Cloud Sync</p>
+          <strong id="auth-status-title">本地模式</strong>
+          <p id="auth-status-copy">未登录时，衣柜数据只保存在当前浏览器。</p>
+          <div class="sidebar-cloud-actions">
+            <button class="ghost-button inline-button" type="button" data-open-auth-modal>登录 / 注册</button>
+            <button class="ghost-button inline-button" type="button" data-auth-signout hidden>退出登录</button>
+          </div>
+        </section>
       </div>
     </aside>
 
@@ -540,9 +550,55 @@
           </section>
         </div>
       </div>
+
+      <div class="modal-backdrop" id="auth-modal" hidden>
+        <div class="modal-panel auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+          <div class="section-head modal-head">
+            <div>
+              <p class="eyebrow">Account</p>
+              <h3 id="auth-modal-title">账号登录与云端同步</h3>
+            </div>
+            <button class="ghost-button modal-close" type="button" data-close-auth-modal>关闭</button>
+          </div>
+
+          <div class="auth-modal-layout">
+            <section class="auth-modal-copy">
+              <p class="auth-modal-lead">注册后就可以把衣柜数据保存到 Supabase，包括你新增的衣服、编辑内容和后续上传的图片。</p>
+              <ul class="auth-modal-points">
+                <li>第一次使用点“注册”创建账号</li>
+                <li>之后用同一邮箱和密码登录</li>
+                <li>如果开启邮箱确认，去收件箱完成验证再回来登录</li>
+              </ul>
+            </section>
+
+            <form class="auth-form" id="auth-form">
+              <label class="auth-field">
+                <span>邮箱</span>
+                <input id="auth-email-input" type="email" autocomplete="email" placeholder="name@example.com" required>
+              </label>
+
+              <label class="auth-field">
+                <span>密码</span>
+                <input id="auth-password-input" type="password" autocomplete="current-password" minlength="6" placeholder="至少 6 位" required>
+              </label>
+
+              <p class="auth-form-hint" id="auth-session-copy">未登录时，仍然可以本地使用，但不会同步到云端。</p>
+              <p class="auth-feedback" id="auth-feedback" hidden></p>
+
+              <div class="auth-action-row">
+                <button class="primary-button inline-button" type="submit">登录</button>
+                <button class="ghost-button inline-button" type="button" data-auth-action="signup">注册</button>
+                <button class="ghost-button inline-button" type="button" data-auth-signout-modal hidden>退出登录</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
+  <script src="./public-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./app.js"></script>
 </body>
 </html>

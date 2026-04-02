@@ -103,6 +103,18 @@ const utilityMode = document.querySelector("#utility-mode");
 const wardrobeSearchInput = document.querySelector("#wardrobe-search-input");
 const wardrobeFilterButtons = document.querySelectorAll("[data-wardrobe-filter]");
 const wardrobeStateButtons = document.querySelectorAll("[data-wardrobe-state]");
+const authModal = document.querySelector("#auth-modal");
+const authModalPanel = authModal ? authModal.querySelector(".modal-panel") : null;
+const authEmailInput = document.querySelector("#auth-email-input");
+const authPasswordInput = document.querySelector("#auth-password-input");
+const authForm = document.querySelector("#auth-form");
+const authFeedback = document.querySelector("#auth-feedback");
+const authStatusTitle = document.querySelector("#auth-status-title");
+const authStatusCopy = document.querySelector("#auth-status-copy");
+const authTriggerLabel = document.querySelector("#auth-trigger-label");
+const authSessionCopy = document.querySelector("#auth-session-copy");
+const authSignOutButtons = document.querySelectorAll("[data-auth-signout]");
+const authSignOutModalButtons = document.querySelectorAll("[data-auth-signout-modal]");
 const addGarmentModal = document.querySelector("#add-garment-modal");
 const addGarmentModalPanel = addGarmentModal ? addGarmentModal.querySelector(".modal-panel") : null;
 const addGarmentCloseButton = addGarmentModal
@@ -135,6 +147,19 @@ const favoriteButtons = document.querySelectorAll("[data-favorite-outfit]");
 const storageTaskNodes = document.querySelectorAll("[data-storage-task]");
 const storageProgressText = document.querySelector("#storage-progress-text");
 const storageProgressBar = document.querySelector("#storage-progress-bar");
+const APP_CONFIG = window.APP_CONFIG || {};
+const SUPABASE_URL = String(APP_CONFIG.supabaseUrl || "").trim();
+const SUPABASE_ANON_KEY = String(APP_CONFIG.supabaseAnonKey || "").trim();
+const SUPABASE_BUCKET = String(APP_CONFIG.supabaseBucket || "garment-images").trim();
+const SITE_URL = String(APP_CONFIG.siteUrl || "").trim();
+const supabaseClient = SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase?.createClient
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true
+      }
+    })
+  : null;
 
 let currentView = "home";
 let currentSeason = "spring";
@@ -142,9 +167,48 @@ let currentWardrobeFilter = "all";
 let currentWardrobeState = "all";
 let currentWardrobeView = "board";
 let lastAddGarmentTrigger = null;
+let lastAuthTrigger = null;
 let isEmbeddedIntakeOpen = false;
+let currentSession = null;
+let currentUser = null;
+let isCloudSyncLoading = false;
+let isAuthSubmitting = false;
 const CUSTOM_GARMENTS_KEY = "atelier-archive-custom-garments";
 const WARDROBE_VIEW_KEY = "atelier-archive-wardrobe-view";
+const WARDROBE_VISIBLE_COLUMNS_KEY = "atelier-archive-wardrobe-visible-columns";
+const WARDROBE_TYPE_OPTIONS = [
+  { value: "top", label: "上装" },
+  { value: "bottom", label: "下装" },
+  { value: "outer", label: "外套" },
+  { value: "accessory", label: "鞋包配饰" }
+];
+const WARDROBE_STATE_OPTIONS = [
+  { value: "pending", label: "待整理" },
+  { value: "active", label: "当季外放" },
+  { value: "frequent", label: "常穿" }
+];
+const WARDROBE_LIST_COLUMNS = [
+  { field: "name", label: "名称", minWidth: 170, cellClass: "cell-name", required: true },
+  { field: "type", label: "类型", minWidth: 132, control: { type: "select", options: WARDROBE_TYPE_OPTIONS } },
+  { field: "state", label: "衣柜状态", minWidth: 136, control: { type: "select", options: WARDROBE_STATE_OPTIONS } },
+  { field: "location", label: "收纳位置", minWidth: 160 },
+  { field: "color", label: "颜色标签", minWidth: 136 },
+  { field: "seasons", label: "季节标签", minWidth: 136 },
+  { field: "purchaseDate", label: "购入时间", minWidth: 150, control: { type: "date" } },
+  { field: "price", label: "价格", minWidth: 118 },
+  { field: "brand", label: "品牌备注", minWidth: 146 },
+  { field: "categoryText", label: "分类说明", minWidth: 148 },
+  { field: "status", label: "状态标签", minWidth: 140 },
+  { field: "frequency", label: "穿着频率", minWidth: 132 },
+  { field: "lastWorn", label: "最近穿着", minWidth: 144 },
+  { field: "footer", label: "卡片短标签", minWidth: 148 },
+  { field: "note", label: "备注", minWidth: 220, cellClass: "cell-note" }
+];
+const WARDROBE_REQUIRED_COLUMNS = WARDROBE_LIST_COLUMNS
+  .filter((column) => column.required)
+  .map((column) => column.field);
+const WARDROBE_DEFAULT_VISIBLE_COLUMNS = WARDROBE_LIST_COLUMNS.map((column) => column.field);
+let currentWardrobeVisibleColumns = WARDROBE_DEFAULT_VISIBLE_COLUMNS.slice();
 const savedOutfits = new Set(
   Array.from(favoriteButtons)
     .filter((button) => button.classList.contains("is-saved"))
@@ -157,12 +221,254 @@ try {
   currentWardrobeView = "board";
 }
 
+try {
+  const savedColumns = JSON.parse(window.localStorage.getItem(WARDROBE_VISIBLE_COLUMNS_KEY) || "null");
+
+  if (Array.isArray(savedColumns)) {
+    currentWardrobeVisibleColumns = normalizeWardrobeVisibleColumns(savedColumns);
+  }
+} catch {
+  currentWardrobeVisibleColumns = WARDROBE_DEFAULT_VISIBLE_COLUMNS.slice();
+}
+
 function getGarmentCards() {
   return Array.from(document.querySelectorAll(".garment-card[data-garment-id]"));
 }
 
 function getWardrobeListRows() {
   return Array.from(document.querySelectorAll(".wardrobe-list-row"));
+}
+
+function normalizeWardrobeVisibleColumns(fields) {
+  const normalized = [];
+  const seen = new Set();
+  const requested = Array.isArray(fields) ? fields : [];
+  const availableFields = new Set(WARDROBE_LIST_COLUMNS.map((column) => column.field));
+
+  WARDROBE_REQUIRED_COLUMNS.forEach((field) => {
+    if (!availableFields.has(field) || seen.has(field)) {
+      return;
+    }
+
+    seen.add(field);
+    normalized.push(field);
+  });
+
+  requested.forEach((field) => {
+    if (!availableFields.has(field) || seen.has(field)) {
+      return;
+    }
+
+    seen.add(field);
+    normalized.push(field);
+  });
+
+  return normalized;
+}
+
+function getVisibleWardrobeColumns() {
+  return WARDROBE_LIST_COLUMNS.filter((column) => currentWardrobeVisibleColumns.includes(column.field));
+}
+
+function setWardrobeVisibleColumns(fields) {
+  currentWardrobeVisibleColumns = normalizeWardrobeVisibleColumns(fields);
+
+  try {
+    window.localStorage.setItem(WARDROBE_VISIBLE_COLUMNS_KEY, JSON.stringify(currentWardrobeVisibleColumns));
+  } catch {
+    // Ignore storage errors and keep the in-memory setting.
+  }
+
+  renderWardrobeListEditor();
+  filterWardrobeCards();
+  syncWardrobeColumnPicker();
+}
+
+function getSiteUrl() {
+  if (SITE_URL) {
+    return SITE_URL;
+  }
+
+  return new URL(window.location.pathname, window.location.origin).toString();
+}
+
+function hasSupabaseConfig() {
+  return Boolean(supabaseClient);
+}
+
+function canSyncWardrobeToCloud() {
+  return Boolean(supabaseClient && currentUser);
+}
+
+function getGarmentStorageKeyForUser(userId = "") {
+  return userId ? `${CUSTOM_GARMENTS_KEY}:${userId}` : CUSTOM_GARMENTS_KEY;
+}
+
+function getCurrentGarmentStorageKey() {
+  return getGarmentStorageKeyForUser(currentUser?.id || "");
+}
+
+function loadCustomGarmentsFromStorageKey(storageKey) {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.map(normalizeCustomGarment) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomGarmentsToStorageKey(storageKey, items) {
+  window.localStorage.setItem(storageKey, JSON.stringify(items.map(normalizeCustomGarment)));
+}
+
+function clearCustomGarmentsFromStorageKey(storageKey) {
+  window.localStorage.removeItem(storageKey);
+}
+
+function mergeGarmentCollections(...collections) {
+  const merged = new Map();
+
+  collections.flat().forEach((item) => {
+    const normalized = normalizeCustomGarment(item);
+
+    if (!normalized.id) {
+      return;
+    }
+
+    merged.set(normalized.id, normalized);
+  });
+
+  return Array.from(merged.values());
+}
+
+function setAuthFeedback(message, tone = "info") {
+  if (!authFeedback) {
+    return;
+  }
+
+  authFeedback.hidden = !message;
+  authFeedback.textContent = message || "";
+  authFeedback.dataset.tone = tone;
+}
+
+function setAuthBusy(isBusy) {
+  isAuthSubmitting = isBusy;
+
+  authEmailInput?.toggleAttribute("disabled", isBusy);
+  authPasswordInput?.toggleAttribute("disabled", isBusy);
+  authForm?.querySelectorAll("button").forEach((button) => {
+    button.disabled = isBusy || (!hasSupabaseConfig() && button.type !== "button");
+  });
+}
+
+function syncBodyModalState() {
+  const hasOpenModal = [addGarmentModal, authModal].some((modal) => modal && !modal.hidden);
+  document.body.classList.toggle("modal-open", hasOpenModal);
+}
+
+function getAuthSummaryText() {
+  if (!hasSupabaseConfig()) {
+    return "还没有配置 Supabase，请先填写 public-config.js 中的项目地址和 anon key。";
+  }
+
+  if (isCloudSyncLoading) {
+    return "正在同步云端衣柜，请稍等。";
+  }
+
+  if (currentUser?.email) {
+    return `当前账号：${currentUser.email}`;
+  }
+
+  return "未登录时，仍然可以本地使用，但不会同步到云端。";
+}
+
+function syncAuthUi() {
+  const isConfigured = hasSupabaseConfig();
+  const isLoggedIn = Boolean(currentUser?.email);
+  const title = !isConfigured
+    ? "云端未配置"
+    : isLoggedIn
+      ? "云端已连接"
+      : "等待登录";
+  const copy = !isConfigured
+    ? "先配置 Supabase 后，才能注册账号、保存个人衣柜和上传信息。"
+    : isCloudSyncLoading
+      ? "正在从云端同步你的衣柜数据。"
+      : isLoggedIn
+        ? `${currentUser.email} 已登录，衣柜会自动同步到云端。`
+        : "登录后，新增和编辑的衣服会保存到 Supabase。";
+
+  if (authStatusTitle) {
+    authStatusTitle.textContent = title;
+  }
+
+  if (authStatusCopy) {
+    authStatusCopy.textContent = copy;
+  }
+
+  if (authTriggerLabel) {
+    authTriggerLabel.textContent = isConfigured ? (isLoggedIn ? "账号已连接" : "账号与云端") : "云端未配置";
+  }
+
+  if (authSessionCopy) {
+    authSessionCopy.textContent = getAuthSummaryText();
+  }
+
+  authSignOutButtons.forEach((button) => {
+    button.hidden = !isLoggedIn;
+  });
+
+  authSignOutModalButtons.forEach((button) => {
+    button.hidden = !isLoggedIn;
+  });
+
+  authForm?.querySelectorAll("button").forEach((button) => {
+    if (button.hasAttribute("data-auth-signout-modal")) {
+      return;
+    }
+
+    button.disabled = isAuthSubmitting || !isConfigured;
+  });
+}
+
+function openAuthModal(trigger = null) {
+  if (!authModal) {
+    return;
+  }
+
+  if (trigger instanceof HTMLElement) {
+    lastAuthTrigger = trigger;
+  }
+
+  authModal.hidden = false;
+  authModal.classList.add("is-open");
+  authModal.setAttribute("aria-hidden", "false");
+  syncBodyModalState();
+  syncAuthUi();
+  authEmailInput?.focus();
+}
+
+function closeAuthModal() {
+  if (!authModal) {
+    return;
+  }
+
+  authModal.hidden = true;
+  authModal.classList.remove("is-open");
+  authModal.setAttribute("aria-hidden", "true");
+  setAuthFeedback("");
+  syncBodyModalState();
+
+  if (lastAuthTrigger instanceof HTMLElement) {
+    lastAuthTrigger.focus();
+  }
+}
+
+function getAuthCredentials() {
+  return {
+    email: authEmailInput?.value.trim() || "",
+    password: authPasswordInput?.value || ""
+  };
 }
 
 function getWardrobeFilterLabel(type) {
@@ -374,6 +680,31 @@ function normalizeWardrobeToolbar() {
     tabRow.appendChild(existingActions);
   }
 
+  if (existingActions && !existingActions.querySelector("[data-wardrobe-column-picker]")) {
+    const picker = document.createElement("div");
+    const addButton = existingActions.querySelector("[data-open-add-modal]");
+
+    picker.className = "wardrobe-column-picker";
+    picker.dataset.wardrobeColumnPicker = "";
+    picker.innerHTML = `
+      <button
+        class="secondary-button inline-button wardrobe-column-toggle"
+        type="button"
+        data-toggle-wardrobe-columns
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="wardrobe-column-popover"
+      >显示属性</button>
+      <div class="wardrobe-column-popover" id="wardrobe-column-popover" data-wardrobe-column-panel></div>
+    `;
+
+    if (addButton) {
+      existingActions.insertBefore(picker, addButton);
+    } else {
+      existingActions.appendChild(picker);
+    }
+  }
+
   if (existingActions && !existingActions.querySelector("[data-toggle-wardrobe-view]")) {
     const addButton = existingActions.querySelector("[data-open-add-modal]");
     const viewButton = document.createElement("button");
@@ -391,6 +722,70 @@ function normalizeWardrobeToolbar() {
   wardrobeHead?.remove();
   summaryStrip?.remove();
   toggleGroups = document.querySelectorAll("[data-toggle-group]");
+}
+
+function renderWardrobeColumnPickerOptions() {
+  return `
+    <div class="wardrobe-column-popover-head">
+      <strong>列表显示属性</strong>
+      <span>名称和操作固定显示，其他列可以按你的习惯自由隐藏。</span>
+    </div>
+    <div class="wardrobe-column-grid">
+      ${WARDROBE_LIST_COLUMNS
+        .filter((column) => !column.required)
+        .map((column) => `
+          <label class="wardrobe-column-option">
+            <input
+              type="checkbox"
+              data-wardrobe-column-field="${escapeHtml(column.field)}"
+              ${currentWardrobeVisibleColumns.includes(column.field) ? "checked" : ""}
+            >
+            <span>${escapeHtml(column.label)}</span>
+          </label>
+        `)
+        .join("")}
+    </div>
+  `;
+}
+
+function closeWardrobeColumnPicker() {
+  const picker = document.querySelector("[data-wardrobe-column-picker]");
+  const button = picker?.querySelector("[data-toggle-wardrobe-columns]");
+
+  picker?.classList.remove("is-open");
+  button?.setAttribute("aria-expanded", "false");
+}
+
+function toggleWardrobeColumnPicker(forceOpen) {
+  const picker = document.querySelector("[data-wardrobe-column-picker]");
+  const button = picker?.querySelector("[data-toggle-wardrobe-columns]");
+
+  if (!picker || picker.hidden) {
+    return;
+  }
+
+  const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !picker.classList.contains("is-open");
+  picker.classList.toggle("is-open", shouldOpen);
+  button?.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+}
+
+function syncWardrobeColumnPicker() {
+  const picker = document.querySelector("[data-wardrobe-column-picker]");
+  const button = picker?.querySelector("[data-toggle-wardrobe-columns]");
+  const panel = picker?.querySelector("[data-wardrobe-column-panel]");
+
+  if (!picker || !button || !panel) {
+    return;
+  }
+
+  if (currentWardrobeView !== "list") {
+    closeWardrobeColumnPicker();
+  }
+
+  picker.hidden = currentWardrobeView !== "list";
+  button.textContent = `显示属性 · ${getVisibleWardrobeColumns().length}列`;
+  button.setAttribute("aria-expanded", picker.classList.contains("is-open") ? "true" : "false");
+  panel.innerHTML = renderWardrobeColumnPickerOptions();
 }
 
 function ensureWardrobeListEditor() {
@@ -463,128 +858,6 @@ function normalizeCustomGarment(item) {
   };
 }
 
-function buildWardrobeEditorField(label, field, value, options = {}) {
-  const { type = "text", rows = 0, fieldClass = "" } = options;
-
-  if (type === "textarea") {
-    return `
-      <label class="wardrobe-editor-field ${fieldClass}">
-        <span>${label}</span>
-        <textarea data-field="${field}" rows="${rows || 3}">${escapeHtml(value || "")}</textarea>
-      </label>
-    `;
-  }
-
-  if (type === "select") {
-    const selectOptions = (options.options || [])
-      .map((option) => {
-        const selected = String(option.value) === String(value) ? " selected" : "";
-        return `<option value="${escapeHtml(option.value)}"${selected}>${escapeHtml(option.label)}</option>`;
-      })
-      .join("");
-
-    return `
-      <label class="wardrobe-editor-field ${fieldClass}">
-        <span>${label}</span>
-        <select data-field="${field}">
-          ${selectOptions}
-        </select>
-      </label>
-    `;
-  }
-
-  return `
-    <label class="wardrobe-editor-field ${fieldClass}">
-      <span>${label}</span>
-      <input data-field="${field}" type="${type}" value="${escapeHtml(value || "")}">
-    </label>
-  `;
-}
-
-function buildWardrobeListRowMarkup(item, index) {
-  const summary = [getTypeLabel(item.type), item.location || "待整理"].filter(Boolean).join(" / ");
-
-  return `
-    <article
-      class="wardrobe-list-row"
-      data-garment-id="${escapeHtml(item.id)}"
-      data-garment-type="${escapeHtml(item.type)}"
-      data-garment-state="${escapeHtml(item.state)}"
-      data-garment-name="${escapeHtml(item.name)}"
-      data-garment-category="${escapeHtml(item.categoryText)}"
-      data-garment-location="${escapeHtml(item.location)}"
-      data-garment-seasons="${escapeHtml(item.seasons)}"
-      data-garment-status="${escapeHtml(item.status)}"
-      data-garment-color="${escapeHtml(item.color)}"
-      data-garment-brand="${escapeHtml(item.brand)}"
-      data-garment-price="${escapeHtml(item.price)}"
-    >
-      <div class="wardrobe-list-row-head">
-        <div class="wardrobe-list-row-title">
-          <strong>${escapeHtml(item.name || `衣物 ${index + 1}`)}</strong>
-          <span>${escapeHtml(summary)}</span>
-        </div>
-        <button class="ghost-button inline-button wardrobe-delete-button" type="button" data-delete-garment="${escapeHtml(item.id)}">删除衣物</button>
-      </div>
-
-      <div class="wardrobe-list-fields">
-        ${buildWardrobeEditorField("衣物名称", "name", item.name)}
-        ${buildWardrobeEditorField("衣物类型", "type", item.type, {
-          type: "select",
-          options: [
-            { value: "top", label: "上装" },
-            { value: "bottom", label: "下装" },
-            { value: "outer", label: "外套" },
-            { value: "accessory", label: "鞋包配饰" }
-          ]
-        })}
-        ${buildWardrobeEditorField("衣柜状态", "state", item.state, {
-          type: "select",
-          options: [
-            { value: "pending", label: "待整理" },
-            { value: "active", label: "当季外放" },
-            { value: "frequent", label: "常穿" }
-          ]
-        })}
-        ${buildWardrobeEditorField("收纳位置", "location", item.location)}
-        ${buildWardrobeEditorField("颜色标签", "color", item.color)}
-        ${buildWardrobeEditorField("季节标签", "seasons", item.seasons)}
-        ${buildWardrobeEditorField("购入时间", "purchaseDate", item.purchaseDate, { type: "date" })}
-        ${buildWardrobeEditorField("价格", "price", item.price)}
-        ${buildWardrobeEditorField("品牌备注", "brand", item.brand)}
-        ${buildWardrobeEditorField("分类说明", "categoryText", item.categoryText)}
-        ${buildWardrobeEditorField("状态标签", "status", item.status)}
-        ${buildWardrobeEditorField("穿着频率", "frequency", item.frequency)}
-        ${buildWardrobeEditorField("最近穿着", "lastWorn", item.lastWorn)}
-        ${buildWardrobeEditorField("卡片短标签", "footer", item.footer)}
-        ${buildWardrobeEditorField("备注", "note", item.note, { type: "textarea", rows: 3, fieldClass: "is-wide" })}
-      </div>
-    </article>
-  `;
-}
-
-function renderWardrobeListEditor() {
-  const editor = ensureWardrobeListEditor();
-
-  if (!editor) {
-    return;
-  }
-
-  const items = loadCustomGarments();
-
-  if (!items.length) {
-    editor.innerHTML = `
-      <div class="wardrobe-list-empty">
-        <strong>还没有可编辑的衣物</strong>
-        <span>先去“新增”页生成并加入几件衣物，再切回列表模式编辑。</span>
-      </div>
-    `;
-    return;
-  }
-
-  editor.innerHTML = items.map((item, index) => buildWardrobeListRowMarkup(item, index)).join("");
-}
-
 function buildWardrobeTableControl(field, value, options = {}) {
   const { type = "text" } = options;
 
@@ -602,7 +875,19 @@ function buildWardrobeTableControl(field, value, options = {}) {
   return `<input data-field="${field}" type="${type}" value="${escapeHtml(value || "")}">`;
 }
 
+function buildWardrobeTableCellMarkup(item, column) {
+  const controlMarkup = buildWardrobeTableControl(column.field, item[column.field], column.control || {});
+  const className = column.cellClass ? ` class="${column.cellClass}"` : "";
+  return `<td${className}>${controlMarkup}</td>`;
+}
+
+function getWardrobeTableMinWidth(columns) {
+  return columns.reduce((total, column) => total + (column.minWidth || 120), 96);
+}
+
 function buildWardrobeListRowMarkup(item) {
+  const visibleColumns = getVisibleWardrobeColumns();
+
   return `
     <tr
       class="wardrobe-list-row"
@@ -618,36 +903,7 @@ function buildWardrobeListRowMarkup(item) {
       data-garment-brand="${escapeHtml(item.brand)}"
       data-garment-price="${escapeHtml(item.price)}"
     >
-      <td class="cell-name">${buildWardrobeTableControl("name", item.name)}</td>
-      <td>${buildWardrobeTableControl("type", item.type, {
-        type: "select",
-        options: [
-          { value: "top", label: "上装" },
-          { value: "bottom", label: "下装" },
-          { value: "outer", label: "外套" },
-          { value: "accessory", label: "鞋包配饰" }
-        ]
-      })}</td>
-      <td>${buildWardrobeTableControl("state", item.state, {
-        type: "select",
-        options: [
-          { value: "pending", label: "待整理" },
-          { value: "active", label: "当季外放" },
-          { value: "frequent", label: "常穿" }
-        ]
-      })}</td>
-      <td>${buildWardrobeTableControl("location", item.location)}</td>
-      <td>${buildWardrobeTableControl("color", item.color)}</td>
-      <td>${buildWardrobeTableControl("seasons", item.seasons)}</td>
-      <td>${buildWardrobeTableControl("purchaseDate", item.purchaseDate, { type: "date" })}</td>
-      <td>${buildWardrobeTableControl("price", item.price)}</td>
-      <td>${buildWardrobeTableControl("brand", item.brand)}</td>
-      <td>${buildWardrobeTableControl("categoryText", item.categoryText)}</td>
-      <td>${buildWardrobeTableControl("status", item.status)}</td>
-      <td>${buildWardrobeTableControl("frequency", item.frequency)}</td>
-      <td>${buildWardrobeTableControl("lastWorn", item.lastWorn)}</td>
-      <td>${buildWardrobeTableControl("footer", item.footer)}</td>
-      <td class="cell-note">${buildWardrobeTableControl("note", item.note)}</td>
+      ${visibleColumns.map((column) => buildWardrobeTableCellMarkup(item, column)).join("")}
       <td class="cell-action">
         <button class="ghost-button inline-button wardrobe-delete-button" type="button" data-delete-garment="${escapeHtml(item.id)}">删除</button>
       </td>
@@ -663,6 +919,7 @@ function renderWardrobeListEditor() {
   }
 
   const items = loadCustomGarments();
+  const visibleColumns = getVisibleWardrobeColumns();
 
   if (!items.length) {
     editor.innerHTML = `
@@ -676,74 +933,10 @@ function renderWardrobeListEditor() {
 
   editor.innerHTML = `
     <div class="wardrobe-editor-table-shell">
-      <table class="wardrobe-editor-table">
+      <table class="wardrobe-editor-table" style="min-width: ${getWardrobeTableMinWidth(visibleColumns)}px;">
         <thead>
           <tr>
-            <th>名称</th>
-            <th>类型</th>
-            <th>状态</th>
-            <th>位置</th>
-            <th>颜色</th>
-            <th>季节</th>
-            <th>购入时间</th>
-            <th>价格</th>
-            <th>品牌</th>
-            <th>分类说明</th>
-            <th>状态标签</th>
-            <th>频率</th>
-            <th>最近穿着</th>
-            <th>卡片标签</th>
-            <th>备注</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map((item) => buildWardrobeListRowMarkup(item)).join("")}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
-function renderWardrobeListEditor() {
-  const editor = ensureWardrobeListEditor();
-
-  if (!editor) {
-    return;
-  }
-
-  const items = loadCustomGarments();
-
-  if (!items.length) {
-    editor.innerHTML = `
-      <div class="wardrobe-list-empty">
-        <strong>还没有可编辑的衣物</strong>
-        <span>先去“新增”页生成并加入几件衣物，再切回列表模式编辑。</span>
-      </div>
-    `;
-    return;
-  }
-
-  editor.innerHTML = `
-    <div class="wardrobe-editor-table-shell">
-      <table class="wardrobe-editor-table">
-        <thead>
-          <tr>
-            <th>名称</th>
-            <th>类型</th>
-            <th>状态</th>
-            <th>位置</th>
-            <th>颜色</th>
-            <th>季节</th>
-            <th>购入时间</th>
-            <th>价格</th>
-            <th>品牌</th>
-            <th>分类说明</th>
-            <th>状态标签</th>
-            <th>频率</th>
-            <th>最近穿着</th>
-            <th>卡片标签</th>
-            <th>备注</th>
+            ${visibleColumns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}
             <th>操作</th>
           </tr>
         </thead>
@@ -778,6 +971,7 @@ function applyWardrobeViewMode() {
 
   document.body.classList.toggle("wardrobe-list-view-active", currentWardrobeView === "list");
   syncWardrobeViewToggle();
+  syncWardrobeColumnPicker();
 }
 
 function toggleWardrobeViewMode() {
@@ -890,7 +1084,7 @@ function openAddGarmentModal(trigger = null) {
   addGarmentModal.hidden = false;
   addGarmentModal.classList.add("is-open");
   addGarmentModal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
+  syncBodyModalState();
   addGarmentCloseButton?.focus();
 }
 
@@ -939,7 +1133,7 @@ function closeAddGarmentModal() {
   addGarmentModal.classList.remove("is-open");
   addGarmentModal.hidden = true;
   addGarmentModal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
+  syncBodyModalState();
   closeEmbeddedIntake();
   lastAddGarmentTrigger = null;
 
@@ -1040,16 +1234,269 @@ function getFigureClass(type) {
 }
 
 function loadCustomGarments() {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(CUSTOM_GARMENTS_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed.map(normalizeCustomGarment) : [];
-  } catch {
-    return [];
-  }
+  return loadCustomGarmentsFromStorageKey(getCurrentGarmentStorageKey());
 }
 
 function saveCustomGarments(items) {
-  window.localStorage.setItem(CUSTOM_GARMENTS_KEY, JSON.stringify(items.map(normalizeCustomGarment)));
+  saveCustomGarmentsToStorageKey(getCurrentGarmentStorageKey(), items);
+}
+
+function replaceGarmentInStorageKey(storageKey, item) {
+  const items = loadCustomGarmentsFromStorageKey(storageKey);
+  const index = items.findIndex((entry) => entry.id === item.id);
+
+  if (index < 0) {
+    return false;
+  }
+
+  items[index] = normalizeCustomGarment(item);
+  saveCustomGarmentsToStorageKey(storageKey, items);
+  return true;
+}
+
+function normalizeCloudGarmentRecord(record) {
+  return normalizeCustomGarment({
+    id: record.id,
+    type: record.type,
+    state: record.state,
+    name: record.name,
+    categoryText: record.category_text,
+    location: record.location,
+    seasons: record.seasons,
+    frequency: record.frequency,
+    lastWorn: record.last_worn,
+    note: record.note,
+    status: record.status,
+    footer: record.footer,
+    imageUrl: record.image_url,
+    color: record.color,
+    purchaseDate: record.purchase_date,
+    price: record.price,
+    brand: record.brand
+  });
+}
+
+function buildCloudGarmentRecord(item, userId = currentUser?.id || "") {
+  const normalized = normalizeCustomGarment(item);
+
+  return {
+    id: normalized.id,
+    user_id: userId,
+    type: normalized.type,
+    state: normalized.state,
+    name: normalized.name,
+    category_text: normalized.categoryText,
+    location: normalized.location,
+    seasons: normalized.seasons,
+    frequency: normalized.frequency,
+    last_worn: normalized.lastWorn,
+    note: normalized.note,
+    status: normalized.status,
+    footer: normalized.footer,
+    image_url: normalized.imageUrl,
+    color: normalized.color,
+    purchase_date: normalized.purchaseDate,
+    price: normalized.price,
+    brand: normalized.brand
+  };
+}
+
+function isLocalDevUrl(url) {
+  return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(url || "");
+}
+
+function getFileExtensionFromMimeType(mimeType) {
+  if (mimeType === "image/jpeg") {
+    return "jpg";
+  }
+
+  if (mimeType === "image/png") {
+    return "png";
+  }
+
+  if (mimeType === "image/webp") {
+    return "webp";
+  }
+
+  return "png";
+}
+
+async function maybeUploadGarmentImage(item, userId = currentUser?.id || "") {
+  const normalized = normalizeCustomGarment(item);
+
+  if (!supabaseClient || !userId || !normalized.imageDataUrl?.startsWith("data:image/")) {
+    if (isLocalDevUrl(normalized.imageUrl)) {
+      return normalizeCustomGarment({
+        ...normalized,
+        imageUrl: ""
+      });
+    }
+
+    return normalized;
+  }
+
+  const response = await fetch(normalized.imageDataUrl);
+  const blob = await response.blob();
+  const extension = getFileExtensionFromMimeType(blob.type);
+  const storagePath = `${userId}/${normalized.id}.${extension}`;
+  const { error } = await supabaseClient.storage.from(SUPABASE_BUCKET).upload(storagePath, blob, {
+    upsert: true,
+    contentType: blob.type || "image/png"
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabaseClient.storage.from(SUPABASE_BUCKET).getPublicUrl(storagePath);
+
+  return normalizeCustomGarment({
+    ...normalized,
+    imageUrl: data?.publicUrl || normalized.imageUrl,
+    imageDataUrl: ""
+  });
+}
+
+async function upsertGarmentInCloud(item, userId = currentUser?.id || "") {
+  if (!supabaseClient || !userId) {
+    return normalizeCustomGarment(item);
+  }
+
+  const prepared = await maybeUploadGarmentImage(item, userId);
+  const { data, error } = await supabaseClient
+    .from("garments")
+    .upsert(buildCloudGarmentRecord(prepared, userId))
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ? normalizeCloudGarmentRecord(data) : prepared;
+}
+
+async function removeGarmentFromCloud(id) {
+  if (!supabaseClient || !currentUser?.id) {
+    return;
+  }
+
+  const { error } = await supabaseClient.from("garments").delete().eq("id", id);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function fetchCloudGarments() {
+  if (!supabaseClient || !currentUser?.id) {
+    return [];
+  }
+
+  const { data, error } = await supabaseClient
+    .from("garments")
+    .select("*")
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(normalizeCloudGarmentRecord);
+}
+
+function handleCloudSyncError(error, fallbackMessage) {
+  console.error(error);
+
+  if (authStatusCopy) {
+    authStatusCopy.textContent = fallbackMessage;
+  }
+
+  setAuthFeedback(fallbackMessage, "error");
+}
+
+async function hydrateWardrobeFromCloud() {
+  if (!canSyncWardrobeToCloud() || isCloudSyncLoading) {
+    return;
+  }
+
+  isCloudSyncLoading = true;
+  syncAuthUi();
+
+  const userId = currentUser.id;
+  const userStorageKey = getGarmentStorageKeyForUser(userId);
+  const anonymousItems = loadCustomGarmentsFromStorageKey(CUSTOM_GARMENTS_KEY);
+  const cachedUserItems = loadCustomGarmentsFromStorageKey(userStorageKey);
+
+  try {
+    const cloudItems = await fetchCloudGarments();
+    const localItems = mergeGarmentCollections(cachedUserItems, anonymousItems);
+    const cloudIds = new Set(cloudItems.map((item) => item.id));
+    const localOnlyItems = localItems.filter((item) => !cloudIds.has(item.id));
+    const syncedLocalItems = [];
+
+    for (const item of localOnlyItems) {
+      try {
+        syncedLocalItems.push(await upsertGarmentInCloud(item, userId));
+      } catch (error) {
+        console.error(error);
+        syncedLocalItems.push(item);
+      }
+    }
+
+    const finalItems = mergeGarmentCollections(localItems, cloudItems, syncedLocalItems);
+    saveCustomGarmentsToStorageKey(userStorageKey, finalItems);
+
+    if (anonymousItems.length) {
+      clearCustomGarmentsFromStorageKey(CUSTOM_GARMENTS_KEY);
+    }
+
+    if (currentUser?.id === userId) {
+      renderCustomGarments();
+      filterWardrobeCards();
+    }
+  } catch (error) {
+    handleCloudSyncError(error, "云端同步失败，当前先继续使用本地缓存。");
+  } finally {
+    isCloudSyncLoading = false;
+    syncAuthUi();
+  }
+}
+
+function syncGarmentToCloudInBackground(item, userId = currentUser?.id || "") {
+  if (!supabaseClient || !userId) {
+    return;
+  }
+
+  const storageKey = getGarmentStorageKeyForUser(userId);
+
+  upsertGarmentInCloud(item, userId)
+    .then((syncedItem) => {
+      const didReplace = replaceGarmentInStorageKey(storageKey, syncedItem);
+
+      if (!didReplace) {
+        return;
+      }
+
+      if (currentUser?.id === userId) {
+        renderCustomGarments();
+        filterWardrobeCards();
+        selectGarment(syncedItem.id);
+      }
+    })
+    .catch((error) => {
+      handleCloudSyncError(error, "云端保存失败，当前修改仍保留在本地。");
+    });
+}
+
+function deleteGarmentFromCloudInBackground(id) {
+  if (!canSyncWardrobeToCloud()) {
+    return;
+  }
+
+  removeGarmentFromCloud(id).catch((error) => {
+    handleCloudSyncError(error, "云端删除失败，刷新后可能还会看到这件衣物。");
+  });
 }
 
 function buildCustomGarmentCardMarkup(item) {
@@ -1240,18 +1687,21 @@ function renderCustomGarments() {
 
 function addGarmentToWardrobe(item) {
   const allItems = loadCustomGarments();
-  const existingIndex = allItems.findIndex((entry) => entry.id === item.id);
+  const normalizedItem = normalizeCustomGarment(item);
+  const existingIndex = allItems.findIndex((entry) => entry.id === normalizedItem.id);
+  const userId = currentUser?.id || "";
 
   if (existingIndex >= 0) {
-    allItems[existingIndex] = item;
+    allItems[existingIndex] = normalizedItem;
   } else {
-    allItems.unshift(item);
+    allItems.unshift(normalizedItem);
   }
 
   saveCustomGarments(allItems);
   renderCustomGarments();
   filterWardrobeCards();
-  selectGarment(item.id);
+  selectGarment(normalizedItem.id);
+  syncGarmentToCloudInBackground(normalizedItem, userId);
 }
 
 function updateGarmentInWardrobe(id, field, value) {
@@ -1266,18 +1716,23 @@ function updateGarmentInWardrobe(id, field, value) {
     ...allItems[itemIndex],
     [field]: value
   });
+  const updatedItem = allItems[itemIndex];
+  const userId = currentUser?.id || "";
 
   saveCustomGarments(allItems);
   renderCustomGarments();
   filterWardrobeCards();
   selectGarment(id);
+  syncGarmentToCloudInBackground(updatedItem, userId);
 }
 
 function removeGarmentFromWardrobe(id) {
+  const userId = currentUser?.id || "";
   const remainingItems = loadCustomGarments().filter((entry) => entry.id !== id);
   saveCustomGarments(remainingItems);
   renderCustomGarments();
   filterWardrobeCards();
+  deleteGarmentFromCloudInBackground(id, userId);
 
   const nextItem = remainingItems[0];
   if (nextItem) {
@@ -1330,6 +1785,149 @@ function renderSearchResults(query) {
   globalSearchResults.hidden = false;
 }
 
+async function signInWithEmailPassword() {
+  if (!supabaseClient) {
+    setAuthFeedback("还没有配置 Supabase，请先填写 public-config.js。", "error");
+    return;
+  }
+
+  const { email, password } = getAuthCredentials();
+
+  if (!email || !password) {
+    setAuthFeedback("请输入邮箱和密码。", "error");
+    return;
+  }
+
+  setAuthBusy(true);
+  setAuthFeedback("");
+
+  try {
+    const { error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    closeAuthModal();
+  } catch (error) {
+    setAuthFeedback(error.message || "登录失败，请稍后再试。", "error");
+  } finally {
+    setAuthBusy(false);
+    syncAuthUi();
+  }
+}
+
+async function signUpWithEmailPassword() {
+  if (!supabaseClient) {
+    setAuthFeedback("还没有配置 Supabase，请先填写 public-config.js。", "error");
+    return;
+  }
+
+  const { email, password } = getAuthCredentials();
+
+  if (!email || !password) {
+    setAuthFeedback("请输入邮箱和密码。", "error");
+    return;
+  }
+
+  setAuthBusy(true);
+  setAuthFeedback("");
+
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: getSiteUrl()
+      }
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data.session) {
+      closeAuthModal();
+      return;
+    }
+
+    setAuthFeedback("注册成功，请先到邮箱完成验证，然后再回来登录。", "success");
+  } catch (error) {
+    setAuthFeedback(error.message || "注册失败，请稍后再试。", "error");
+  } finally {
+    setAuthBusy(false);
+    syncAuthUi();
+  }
+}
+
+async function signOutCurrentUser() {
+  if (!supabaseClient) {
+    closeAuthModal();
+    return;
+  }
+
+  setAuthBusy(true);
+  setAuthFeedback("");
+
+  try {
+    const { error } = await supabaseClient.auth.signOut();
+
+    if (error) {
+      throw error;
+    }
+
+    closeAuthModal();
+  } catch (error) {
+    setAuthFeedback(error.message || "退出登录失败，请稍后再试。", "error");
+  } finally {
+    setAuthBusy(false);
+    syncAuthUi();
+  }
+}
+
+async function initializeCloudFeatures() {
+  syncAuthUi();
+
+  if (!supabaseClient) {
+    return;
+  }
+
+  try {
+    const { data, error } = await supabaseClient.auth.getSession();
+
+    if (error) {
+      throw error;
+    }
+
+    currentSession = data.session || null;
+    currentUser = currentSession?.user || null;
+    syncAuthUi();
+
+    if (currentUser) {
+      await hydrateWardrobeFromCloud();
+    }
+  } catch (error) {
+    handleCloudSyncError(error, "云端连接初始化失败，当前先继续使用本地缓存。");
+  }
+
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    currentSession = session || null;
+    currentUser = currentSession?.user || null;
+    syncAuthUi();
+
+    if (currentUser) {
+      void hydrateWardrobeFromCloud();
+      return;
+    }
+
+    renderCustomGarments();
+    filterWardrobeCards();
+  });
+}
+
 if ("scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
 }
@@ -1355,6 +1953,23 @@ viewLinks.forEach((link) => {
 
 window.addEventListener("hashchange", () => {
   applyView(getViewFromHash());
+});
+
+authForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void signInWithEmailPassword();
+});
+
+document.querySelectorAll('[data-auth-action="signup"]').forEach((button) => {
+  button.addEventListener("click", () => {
+    void signUpWithEmailPassword();
+  });
+});
+
+[...authSignOutButtons, ...authSignOutModalButtons].forEach((button) => {
+  button.addEventListener("click", () => {
+    void signOutCurrentUser();
+  });
 });
 
 seasonButtons.forEach((button) => {
@@ -1391,6 +2006,9 @@ if (wardrobeGrid) {
 normalizeWardrobeToolbar();
 const wardrobeListEditor = ensureWardrobeListEditor();
 const wardrobeFilterGroup = document.querySelector("[data-wardrobe-filter-group]");
+const wardrobeColumnPicker = document.querySelector("[data-wardrobe-column-picker]");
+
+syncWardrobeColumnPicker();
 
 if (wardrobeListEditor) {
   wardrobeListEditor.addEventListener("focusin", (event) => {
@@ -1431,6 +2049,46 @@ if (wardrobeListEditor) {
 
 document.querySelector("[data-toggle-wardrobe-view]")?.addEventListener("click", () => {
   toggleWardrobeViewMode();
+});
+
+wardrobeColumnPicker?.addEventListener("click", (event) => {
+  const toggleButton = event.target.closest("[data-toggle-wardrobe-columns]");
+
+  if (!toggleButton) {
+    return;
+  }
+
+  toggleWardrobeColumnPicker();
+});
+
+wardrobeColumnPicker?.addEventListener("change", (event) => {
+  const checkbox = event.target.closest("[data-wardrobe-column-field]");
+
+  if (!checkbox) {
+    return;
+  }
+
+  const selectedOptionalFields = Array.from(
+    wardrobeColumnPicker.querySelectorAll("[data-wardrobe-column-field]:checked")
+  ).map((input) => input.dataset.wardrobeColumnField);
+
+  setWardrobeVisibleColumns([...WARDROBE_REQUIRED_COLUMNS, ...selectedOptionalFields]);
+});
+
+document.addEventListener("click", (event) => {
+  if (!wardrobeColumnPicker || !wardrobeColumnPicker.classList.contains("is-open")) {
+    return;
+  }
+
+  if (!wardrobeColumnPicker.contains(event.target)) {
+    closeWardrobeColumnPicker();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeWardrobeColumnPicker();
+  }
 });
 
 wardrobeFilterGroup?.addEventListener("click", (event) => {
@@ -1601,6 +2259,13 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const openAuthTrigger = target.closest("[data-open-auth-modal]");
+  if (openAuthTrigger) {
+    event.preventDefault();
+    openAuthModal(openAuthTrigger);
+    return;
+  }
+
   const toggleAiTrigger = target.closest("[data-toggle-ai-intake]");
   if (toggleAiTrigger) {
     event.preventDefault();
@@ -1615,12 +2280,29 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const closeAuthTrigger = target.closest("[data-close-auth-modal]");
+  if (closeAuthTrigger) {
+    event.preventDefault();
+    closeAuthModal();
+    return;
+  }
+
   if (addGarmentModal && !addGarmentModal.hidden) {
     const clickedBackdrop = target === addGarmentModal;
     const clickedInsidePanel = addGarmentModalPanel instanceof Element && addGarmentModalPanel.contains(target);
 
     if (clickedBackdrop && !clickedInsidePanel) {
       closeAddGarmentModal();
+      return;
+    }
+  }
+
+  if (authModal && !authModal.hidden) {
+    const clickedBackdrop = target === authModal;
+    const clickedInsidePanel = authModalPanel instanceof Element && authModalPanel.contains(target);
+
+    if (clickedBackdrop && !clickedInsidePanel) {
+      closeAuthModal();
       return;
     }
   }
@@ -1639,6 +2321,10 @@ document.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && addGarmentModal && !addGarmentModal.hidden) {
     closeAddGarmentModal();
+  }
+
+  if (event.key === "Escape" && authModal && !authModal.hidden) {
+    closeAuthModal();
   }
 });
 
@@ -1659,3 +2345,4 @@ renderCustomGarments();
 filterWardrobeCards();
 updateStorageProgress();
 syncEmbeddedIntakeState();
+void initializeCloudFeatures();

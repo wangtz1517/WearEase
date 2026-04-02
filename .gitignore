@@ -2,3 +2,4 @@
 ai-intake-service/.env
 node_modules/
 assets/ai-test/
+dist-pages/

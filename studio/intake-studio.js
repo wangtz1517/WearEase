@@ -1,4 +1,5 @@
-const SERVICE_BASE_URL = "http://127.0.0.1:8123";
+const APP_CONFIG = window.APP_CONFIG || {};
+const SERVICE_BASE_URL = APP_CONFIG.aiServiceBaseUrl || "http://127.0.0.1:8123";
 const POLL_INTERVAL_MS = 1200;
 const MAX_POLL_COUNT = 90;
 const IS_EMBED_MODE = new URLSearchParams(window.location.search).get("embed") === "1";
