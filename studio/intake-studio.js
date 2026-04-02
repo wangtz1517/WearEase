@@ -6,8 +6,9 @@ const SUPABASE_CDN_URLS = [
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
   "https://unpkg.com/@supabase/supabase-js@2"
 ];
-const MAX_SOURCE_DIMENSION = 1600;
-const MAX_SOURCE_DATA_URL_LENGTH = 5_500_000;
+const MAX_SOURCE_DIMENSION = 1280;
+const MAX_SOURCE_DATA_URL_LENGTH = 2_200_000;
+const FUNCTION_INVOKE_TIMEOUT_MS = 90_000;
 const AI_INTAKE_CHANNEL_NAME = "atelier-archive-ai-intake";
 const AI_INTAKE_PENDING_GARMENT_KEY = "atelier-archive-ai-intake-pending-garment";
 const IS_EMBED_MODE = new URLSearchParams(window.location.search).get("embed") === "1";
@@ -118,6 +119,20 @@ function syncIdleStatus() {
   if (!state.isSubmitting) {
     updatePreviewStatus(getIdleStatusText());
   }
+}
+
+function withTimeout(promise, timeoutMs, timeoutMessage) {
+  let timeoutId = 0;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
 }
 
 async function getReadableInvokeErrorMessage(error, fallbackMessage) {
@@ -366,22 +381,33 @@ async function optimizeImageFile(file) {
 
   try {
     const image = await loadImage(objectUrl);
+
+    if ((image.naturalWidth || image.width) < 24 || (image.naturalHeight || image.height) < 24) {
+      throw new Error("图片尺寸太小，至少需要 24x24 像素。");
+    }
+
     let { width, height } = fitWithin(image.naturalWidth || image.width, image.naturalHeight || image.height, MAX_SOURCE_DIMENSION);
     let canvas = drawImageToSizedCanvas(image, width, height);
-    let dataUrl = exportCanvasDataUrl(canvas, file.type === "image/png" ? "image/png" : "image/jpeg", 0.92);
+    let dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.84);
 
     if (dataUrl.length > MAX_SOURCE_DATA_URL_LENGTH) {
-      dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.86);
+      dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.76);
     }
 
     if (dataUrl.length > MAX_SOURCE_DATA_URL_LENGTH) {
-      ({ width, height } = fitWithin(image.naturalWidth || image.width, image.naturalHeight || image.height, 1280));
+      ({ width, height } = fitWithin(image.naturalWidth || image.width, image.naturalHeight || image.height, 1024));
       canvas = drawImageToSizedCanvas(image, width, height);
-      dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.8);
+      dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.72);
     }
 
     if (dataUrl.length > MAX_SOURCE_DATA_URL_LENGTH) {
-      throw new Error("图片过大，请换一张更小的图片后再试。");
+      ({ width, height } = fitWithin(image.naturalWidth || image.width, image.naturalHeight || image.height, 896));
+      canvas = drawImageToSizedCanvas(image, width, height);
+      dataUrl = exportCanvasDataUrl(canvas, "image/jpeg", 0.66);
+    }
+
+    if (dataUrl.length > MAX_SOURCE_DATA_URL_LENGTH) {
+      throw new Error("图片过大，请裁剪主体后再试。");
     }
 
     return {
@@ -625,15 +651,19 @@ async function submitCurrentJob() {
       throw new Error("请先登录账号后再使用 AI 处理。");
     }
 
-    const { data, error } = await client.functions.invoke(AI_INTAKE_FUNCTION_NAME, {
-      body: {
-        sourceImageDataUrl: state.sourceDataUrl,
-        sourceFilename: state.sourceName || "upload.png",
-        categoryHint: state.category,
-        garmentName: getDisplayName(),
-        notes: buildJobNotes()
-      }
-    });
+    const { data, error } = await withTimeout(
+      client.functions.invoke(AI_INTAKE_FUNCTION_NAME, {
+        body: {
+          sourceImageDataUrl: state.sourceDataUrl,
+          sourceFilename: state.sourceName || "upload.png",
+          categoryHint: state.category,
+          garmentName: getDisplayName(),
+          notes: buildJobNotes()
+        }
+      }),
+      FUNCTION_INVOKE_TIMEOUT_MS,
+      "AI 处理超时。请换更小的图片，或稍后重试。"
+    );
 
     if (error) {
       throw error;

@@ -15,6 +15,8 @@ const VOLCENGINE_BASE_URL = (Deno.env.get("VOLCENGINE_BASE_URL") || "https://ark
 const VOLCENGINE_IMAGE_MODEL = Deno.env.get("VOLCENGINE_IMAGE_MODEL") || "doubao-seedream-5-0-260128";
 const GARMENT_IMAGES_BUCKET = Deno.env.get("GARMENT_IMAGES_BUCKET") || "garment-images";
 const MAX_SOURCE_DATA_URL_LENGTH = 5_500_000;
+const VOLCENGINE_REQUEST_TIMEOUT_MS = 90_000;
+const VOLCENGINE_DOWNLOAD_TIMEOUT_MS = 30_000;
 
 const categoryLabels: Record<string, string> = {
   top: "top",
@@ -142,6 +144,31 @@ function sanitizeFilename(name = "upload.png") {
   return trimmed.replace(/[^\w.\-]+/g, "-").replace(/-+/g, "-");
 }
 
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  timeoutMessage: string
+) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(timeoutMessage);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function buildPrompt(payload: IntakePayload) {
   const category = payload.categoryHint || "top";
   const garmentName = (payload.garmentName || "").trim();
@@ -247,22 +274,27 @@ async function runSeedreamProvider(user: AuthenticatedUser, payload: IntakePaylo
   }
 
   const prompt = buildPrompt(payload);
-  const response = await fetch(`${VOLCENGINE_BASE_URL}/images/generations`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${VOLCENGINE_API_KEY}`
+  const response = await fetchWithTimeout(
+    `${VOLCENGINE_BASE_URL}/images/generations`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLCENGINE_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: VOLCENGINE_IMAGE_MODEL,
+        prompt,
+        image: payload.sourceImageDataUrl,
+        response_format: "url",
+        size: "2K",
+        stream: false,
+        watermark: false
+      })
     },
-    body: JSON.stringify({
-      model: VOLCENGINE_IMAGE_MODEL,
-      prompt,
-      image: payload.sourceImageDataUrl,
-      response_format: "url",
-      size: "2K",
-      stream: false,
-      watermark: false
-    })
-  });
+    VOLCENGINE_REQUEST_TIMEOUT_MS,
+    "Volcengine image generation timed out. Please try again later."
+  );
 
   const providerPayload = await response.json().catch(() => null);
 
@@ -285,11 +317,16 @@ async function runSeedreamProvider(user: AuthenticatedUser, payload: IntakePaylo
     throw new Error("Volcengine response did not include a generated image URL.");
   }
 
-  const generatedResponse = await fetch(generatedImageUrl, {
-    headers: {
-      Authorization: `Bearer ${VOLCENGINE_API_KEY}`
-    }
-  });
+  const generatedResponse = await fetchWithTimeout(
+    generatedImageUrl,
+    {
+      headers: {
+        Authorization: `Bearer ${VOLCENGINE_API_KEY}`
+      }
+    },
+    VOLCENGINE_DOWNLOAD_TIMEOUT_MS,
+    "Downloading the generated image timed out. Please try again later."
+  );
 
   if (!generatedResponse.ok) {
     throw new Error(`Failed to download generated image: ${generatedResponse.status}.`);
