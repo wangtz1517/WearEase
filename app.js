@@ -133,6 +133,14 @@ const seasonStoreCountNodes = document.querySelectorAll("[data-season-store-coun
 const seasonFocusNodes = document.querySelectorAll("[data-season-focus-text]");
 const seasonKeepLists = document.querySelectorAll("[data-season-keep-list]");
 const seasonStoreLists = document.querySelectorAll("[data-season-store-list]");
+const outfitSelectorRows = document.querySelector("#outfit-selector-rows");
+const outfitLoadButton = document.querySelector("#outfit-load-button");
+const outfitResetButton = document.querySelector("#outfit-reset-button");
+const outfitPreviewStatus = document.querySelector("#outfit-preview-status");
+const outfitSelectedSummary = document.querySelector("#outfit-selected-summary");
+const outfitPreviewLayers = Object.fromEntries(
+  Array.from(document.querySelectorAll("[data-outfit-preview-layer]")).map((node) => [node.dataset.outfitPreviewLayer, node])
+);
 const wardrobeGrid = document.querySelector("#wardrobe-grid");
 const wardrobeSummaryCounts = document.querySelectorAll(".wardrobe-summary-strip strong");
 const detailName = document.querySelector("#detail-name");
@@ -218,6 +226,41 @@ const savedOutfits = new Set(
     .filter((button) => button.classList.contains("is-saved"))
     .map((button) => button.dataset.outfitId)
 );
+const OUTFIT_SLOT_CONFIG = [
+  {
+    key: "top",
+    label: "上衣 / 内搭",
+    eyebrow: "Upper",
+    description: "T 恤、衬衫、针织、打底都先放在这里。"
+  },
+  {
+    key: "outer",
+    label: "外套",
+    eyebrow: "Outer",
+    description: "开衫、夹克、大衣和叠穿层。"
+  },
+  {
+    key: "bottom",
+    label: "下装",
+    eyebrow: "Bottom",
+    description: "裤装和裙装会加载到下半身。"
+  },
+  {
+    key: "accessory",
+    label: "鞋包配饰",
+    eyebrow: "Accessories",
+    description: "鞋、包、围巾和帽子统一放在这一行。"
+  }
+];
+const OUTFIT_SELECTION_NONE = "__none__";
+const OUTFIT_SEASON_KEYWORDS = {
+  spring: ["春", "四季"],
+  summer: ["夏", "四季"],
+  autumn: ["秋", "四季"],
+  winter: ["冬", "四季"]
+};
+let outfitDraftSelection = createEmptyOutfitSelection();
+let outfitAppliedSelection = createEmptyOutfitSelection();
 
 try {
   currentWardrobeView = window.localStorage.getItem(WARDROBE_VIEW_KEY) === "list" ? "list" : "board";
@@ -1102,6 +1145,7 @@ function applySeason(key) {
   seasonKeepLists.forEach((list) => renderList(list, config.keep));
   seasonStoreLists.forEach((list) => renderList(list, config.store));
   syncSeasonButtons(key);
+  renderOutfitStudio();
 }
 
 function updateStorageProgress() {
@@ -1309,6 +1353,13 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function createEmptyOutfitSelection() {
+  return OUTFIT_SLOT_CONFIG.reduce((selection, slot) => {
+    selection[slot.key] = "";
+    return selection;
+  }, {});
+}
+
 function getFigureClass(type) {
   if (type === "bottom") {
     return "pants-figure";
@@ -1323,6 +1374,366 @@ function getFigureClass(type) {
   }
 
   return "knit-figure";
+}
+
+function getOutfitItemPreviewSource(item) {
+  return item?.imageUrl || item?.imageDataUrl || "";
+}
+
+function getOutfitItemMetaText(item) {
+  if (!item) {
+    return "";
+  }
+
+  const fragments = [item.color, item.seasons, item.location]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  return fragments.slice(0, 2).join(" / ") || item.categoryText || "已在衣柜中";
+}
+
+function getOutfitSeasonScore(item) {
+  const keywords = OUTFIT_SEASON_KEYWORDS[currentSeason] || [];
+  const sourceText = `${item?.seasons || ""} ${item?.categoryText || ""}`.toLowerCase();
+
+  if (!sourceText.trim()) {
+    return 0;
+  }
+
+  if (keywords.some((keyword) => keyword !== "四季" && sourceText.includes(keyword.toLowerCase()))) {
+    return 2;
+  }
+
+  if (keywords.some((keyword) => sourceText.includes(keyword.toLowerCase()))) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function sortOutfitItemsForCurrentSeason(items) {
+  return items
+    .slice()
+    .sort((left, right) => {
+      const scoreDiff = getOutfitSeasonScore(right) - getOutfitSeasonScore(left);
+
+      if (scoreDiff !== 0) {
+        return scoreDiff;
+      }
+
+      return String(left.name || "").localeCompare(String(right.name || ""), "zh-Hans-CN");
+    });
+}
+
+function groupGarmentsByOutfitSlot() {
+  const grouped = createEmptyOutfitSelection();
+  const items = loadCustomGarments().map(normalizeCustomGarment);
+
+  OUTFIT_SLOT_CONFIG.forEach((slot) => {
+    grouped[slot.key] = sortOutfitItemsForCurrentSeason(items.filter((item) => item.type === slot.key));
+  });
+
+  return grouped;
+}
+
+function sanitizeOutfitSelection(selection, groupedItems) {
+  const nextSelection = createEmptyOutfitSelection();
+  const safeSelection = selection && typeof selection === "object" ? selection : {};
+
+  OUTFIT_SLOT_CONFIG.forEach((slot) => {
+    const currentValue = String(safeSelection[slot.key] || "");
+    const availableIds = new Set((groupedItems[slot.key] || []).map((item) => item.id));
+    nextSelection[slot.key] = availableIds.has(currentValue) ? currentValue : "";
+  });
+
+  return nextSelection;
+}
+
+function getOutfitItemById(groupedItems, slotKey, itemId) {
+  return (groupedItems[slotKey] || []).find((item) => item.id === itemId) || null;
+}
+
+function getSelectedOutfitItems(selection, groupedItems) {
+  return OUTFIT_SLOT_CONFIG
+    .map((slot) => ({
+      slot,
+      item: getOutfitItemById(groupedItems, slot.key, selection[slot.key] || "")
+    }))
+    .filter((entry) => entry.item);
+}
+
+function buildOutfitOptionVisualMarkup(item, slotKey) {
+  if (!item) {
+    return `
+      <span class="outfit-option-visual">
+        <span class="garment-figure ${getFigureClass(slotKey)}"></span>
+      </span>
+    `;
+  }
+
+  const imageSource = getOutfitItemPreviewSource(item);
+
+  if (imageSource) {
+    return `
+      <span class="outfit-option-visual">
+        <img class="outfit-option-photo" src="${escapeHtml(imageSource)}" alt="${escapeHtml(item.name || "衣物预览")}">
+      </span>
+    `;
+  }
+
+  return `
+    <span class="outfit-option-visual">
+      <span class="garment-figure ${getFigureClass(item.type || slotKey)}"></span>
+    </span>
+  `;
+}
+
+function buildOutfitOptionCardMarkup(slot, item) {
+  const itemId = item?.id || OUTFIT_SELECTION_NONE;
+  const displayName = item?.name || `暂不穿${slot.label}`;
+  const metaText = item
+    ? getOutfitItemMetaText(item)
+    : "保留这一层为空，先只看其他单品的组合。";
+
+  return `
+    <button
+      class="outfit-option-card${item ? "" : " is-empty"}"
+      type="button"
+      data-outfit-select
+      data-outfit-slot="${escapeHtml(slot.key)}"
+      data-outfit-item-id="${escapeHtml(itemId)}"
+    >
+      ${buildOutfitOptionVisualMarkup(item, slot.key)}
+      <span class="outfit-option-copy">
+        <strong>${escapeHtml(displayName)}</strong>
+        <span>${escapeHtml(metaText)}</span>
+      </span>
+    </button>
+  `;
+}
+
+function buildOutfitSlotRowMarkup(slot, items) {
+  const trackCards = [buildOutfitOptionCardMarkup(slot, null)]
+    .concat(items.map((item) => buildOutfitOptionCardMarkup(slot, item)))
+    .join("");
+
+  const availabilityText = items.length ? `可选 ${items.length} 件` : "衣柜里还没有这一类";
+
+  return `
+    <section class="outfit-slot-row" data-outfit-slot-row="${escapeHtml(slot.key)}">
+      <div class="outfit-slot-head">
+        <div class="outfit-slot-copy">
+          <p class="eyebrow">${escapeHtml(slot.eyebrow)}</p>
+          <h4>${escapeHtml(slot.label)}</h4>
+          <p>${escapeHtml(slot.description)}</p>
+        </div>
+        <span class="outfit-slot-count">${escapeHtml(availabilityText)}</span>
+      </div>
+
+      <div class="outfit-slot-scroll">
+        <button
+          class="outfit-scroll-button"
+          type="button"
+          data-outfit-scroll="-1"
+          data-outfit-slot="${escapeHtml(slot.key)}"
+          aria-label="向左查看${escapeHtml(slot.label)}"
+        >‹</button>
+        <div class="outfit-slot-track" data-outfit-track="${escapeHtml(slot.key)}">
+          ${trackCards}
+        </div>
+        <button
+          class="outfit-scroll-button"
+          type="button"
+          data-outfit-scroll="1"
+          data-outfit-slot="${escapeHtml(slot.key)}"
+          aria-label="向右查看${escapeHtml(slot.label)}"
+        >›</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderOutfitPreviewLayer(slotKey, item) {
+  const layer = outfitPreviewLayers[slotKey];
+
+  if (!layer) {
+    return;
+  }
+
+  if (!item) {
+    layer.hidden = true;
+    layer.innerHTML = "";
+    return;
+  }
+
+  const imageSource = getOutfitItemPreviewSource(item);
+
+  layer.hidden = false;
+
+  if (imageSource) {
+    layer.innerHTML = `
+      <img class="outfit-preview-asset" src="${escapeHtml(imageSource)}" alt="${escapeHtml(item.name || "穿搭预览")}">
+    `;
+    return;
+  }
+
+  layer.innerHTML = `<span class="garment-figure ${getFigureClass(item.type)}"></span>`;
+}
+
+function syncOutfitActionButtons(groupedItems) {
+  const hasAnyGarments = OUTFIT_SLOT_CONFIG.some((slot) => (groupedItems[slot.key] || []).length > 0);
+  const hasDraftChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
+  const hasAnySelection = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] || outfitAppliedSelection[slot.key]);
+
+  if (outfitLoadButton) {
+    outfitLoadButton.disabled = !hasAnyGarments || !hasDraftChanges;
+    outfitLoadButton.textContent = !hasAnyGarments ? "加载到小人" : (hasDraftChanges ? "加载到小人" : "已加载当前搭配");
+  }
+
+  if (outfitResetButton) {
+    outfitResetButton.disabled = !hasAnyGarments || !hasAnySelection;
+  }
+}
+
+function syncOutfitSelectionUi(groupedItems) {
+  if (!outfitSelectorRows) {
+    return;
+  }
+
+  outfitSelectorRows.querySelectorAll("[data-outfit-select]").forEach((button) => {
+    const slotKey = button.dataset.outfitSlot || "";
+    const itemId = button.dataset.outfitItemId === OUTFIT_SELECTION_NONE ? "" : button.dataset.outfitItemId || "";
+    const isSelected = outfitDraftSelection[slotKey] === itemId;
+    const isApplied = outfitAppliedSelection[slotKey] === itemId;
+
+    button.classList.toggle("is-selected", isSelected);
+    button.classList.toggle("is-applied", Boolean(itemId) && isApplied);
+    button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+  });
+
+  syncOutfitActionButtons(groupedItems);
+}
+
+function syncOutfitPreview(groupedItems) {
+  const selectedItems = getSelectedOutfitItems(outfitAppliedSelection, groupedItems);
+
+  OUTFIT_SLOT_CONFIG.forEach((slot) => {
+    const item = getOutfitItemById(groupedItems, slot.key, outfitAppliedSelection[slot.key] || "");
+    renderOutfitPreviewLayer(slot.key, item);
+  });
+
+  if (outfitPreviewStatus) {
+    const hasDraftChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
+
+    if (!selectedItems.length) {
+      outfitPreviewStatus.textContent = "小人当前还是空白状态。先从左侧选择衣服，再点击“加载到小人”。";
+    } else if (hasDraftChanges) {
+      outfitPreviewStatus.textContent = `当前已加载 ${selectedItems.length} 件单品，左侧还有新的选择尚未应用。`;
+    } else {
+      outfitPreviewStatus.textContent = `当前已加载 ${selectedItems.length} 件单品，可以继续微调后再重新加载。`;
+    }
+  }
+
+  if (outfitSelectedSummary) {
+    outfitSelectedSummary.innerHTML = selectedItems.length
+      ? selectedItems
+        .map(({ slot, item }) => `
+          <span class="outfit-summary-chip">
+            <strong>${escapeHtml(slot.label)}</strong>
+            <span>${escapeHtml(item.name || "未命名衣物")}</span>
+          </span>
+        `)
+        .join("")
+      : `<span class="status-pill muted">还没有加载任何单品</span>`;
+  }
+
+  syncOutfitActionButtons(groupedItems);
+}
+
+function renderOutfitStudio() {
+  if (!outfitSelectorRows) {
+    return;
+  }
+
+  const groupedItems = groupGarmentsByOutfitSlot();
+  const totalItems = OUTFIT_SLOT_CONFIG.reduce((count, slot) => count + (groupedItems[slot.key] || []).length, 0);
+
+  outfitDraftSelection = sanitizeOutfitSelection(outfitDraftSelection, groupedItems);
+  outfitAppliedSelection = sanitizeOutfitSelection(outfitAppliedSelection, groupedItems);
+
+  if (totalItems === 0) {
+    outfitSelectorRows.innerHTML = `
+      <div class="outfit-empty-state">
+        <strong>衣柜里还没有可搭配的单品</strong>
+        <p>先去“衣柜”或“新增衣物”里导入几件标准正面图，再回到这里组合搭配。</p>
+        <button class="primary-button inline-button" type="button" data-open-add-modal>去新增衣物</button>
+      </div>
+    `;
+    syncOutfitPreview(groupedItems);
+    return;
+  }
+
+  outfitSelectorRows.innerHTML = OUTFIT_SLOT_CONFIG
+    .map((slot) => buildOutfitSlotRowMarkup(slot, groupedItems[slot.key] || []))
+    .join("");
+
+  syncOutfitSelectionUi(groupedItems);
+  syncOutfitPreview(groupedItems);
+}
+
+function setOutfitDraftSelection(slotKey, itemId) {
+  if (!OUTFIT_SLOT_CONFIG.some((slot) => slot.key === slotKey)) {
+    return;
+  }
+
+  outfitDraftSelection = {
+    ...outfitDraftSelection,
+    [slotKey]: itemId
+  };
+
+  const groupedItems = groupGarmentsByOutfitSlot();
+  syncOutfitSelectionUi(groupedItems);
+  syncOutfitPreview(groupedItems);
+
+  const targetId = itemId || OUTFIT_SELECTION_NONE;
+  const selectedCard = outfitSelectorRows?.querySelector(
+    `[data-outfit-select][data-outfit-slot="${slotKey}"][data-outfit-item-id="${targetId}"]`
+  );
+
+  selectedCard?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+}
+
+function applyCurrentOutfitSelection() {
+  outfitAppliedSelection = {
+    ...outfitDraftSelection
+  };
+
+  const groupedItems = groupGarmentsByOutfitSlot();
+  syncOutfitSelectionUi(groupedItems);
+  syncOutfitPreview(groupedItems);
+}
+
+function resetOutfitStudio() {
+  outfitDraftSelection = createEmptyOutfitSelection();
+  outfitAppliedSelection = createEmptyOutfitSelection();
+
+  const groupedItems = groupGarmentsByOutfitSlot();
+  syncOutfitSelectionUi(groupedItems);
+  syncOutfitPreview(groupedItems);
+}
+
+function scrollOutfitTrack(slotKey, direction) {
+  const track = outfitSelectorRows?.querySelector(`[data-outfit-track="${slotKey}"]`);
+
+  if (!track) {
+    return;
+  }
+
+  const distance = Math.max(track.clientWidth * 0.86, 220) * direction;
+  track.scrollBy({
+    left: distance,
+    behavior: "smooth"
+  });
 }
 
 function loadCustomGarments() {
@@ -1804,6 +2215,7 @@ function renderCustomGarments() {
   refreshSearchEntries();
   renderWardrobeListEditor();
   applyWardrobeViewMode();
+  renderOutfitStudio();
 }
 
 function addGarmentToWardrobe(item) {
@@ -2118,6 +2530,40 @@ seasonButtons.forEach((button) => {
   button.addEventListener("click", () => {
     applySeason(button.dataset.season);
   });
+});
+
+outfitSelectorRows?.addEventListener("click", (event) => {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const scrollButton = event.target.closest("[data-outfit-scroll]");
+
+  if (scrollButton) {
+    scrollOutfitTrack(scrollButton.dataset.outfitSlot || "", Number(scrollButton.dataset.outfitScroll || "0") || 0);
+    return;
+  }
+
+  const optionButton = event.target.closest("[data-outfit-select]");
+
+  if (!optionButton) {
+    return;
+  }
+
+  const slotKey = optionButton.dataset.outfitSlot || "";
+  const itemId = optionButton.dataset.outfitItemId === OUTFIT_SELECTION_NONE
+    ? ""
+    : optionButton.dataset.outfitItemId || "";
+
+  setOutfitDraftSelection(slotKey, itemId);
+});
+
+outfitLoadButton?.addEventListener("click", () => {
+  applyCurrentOutfitSelection();
+});
+
+outfitResetButton?.addEventListener("click", () => {
+  resetOutfitStudio();
 });
 
 if (wardrobeGrid) {
