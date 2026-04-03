@@ -141,13 +141,16 @@ const outfitPreviewStatus = document.querySelector("#outfit-preview-status");
 const outfitSelectedSummary = document.querySelector("#outfit-selected-summary");
 const outfitPreviewPanel = document.querySelector(".outfit-preview-panel");
 const outfitPreviewRender = document.querySelector("#outfit-preview-render");
+const outfitPreviewEmpty = document.querySelector("#outfit-preview-empty");
+const outfitPreviewEmptyTitle = document.querySelector("#outfit-preview-empty-title");
+const outfitPreviewEmptyCopy = document.querySelector("#outfit-preview-empty-copy");
+const outfitPreviewProcessing = document.querySelector("#outfit-preview-processing");
+const outfitPreviewProcessingTitle = document.querySelector("#outfit-preview-processing-title");
+const outfitPreviewProcessingCopy = document.querySelector("#outfit-preview-processing-copy");
 const outfitModelGenderInput = document.querySelector("#outfit-model-gender");
 const outfitModelHeightInput = document.querySelector("#outfit-model-height");
 const outfitModelWeightInput = document.querySelector("#outfit-model-weight");
 const outfitModelEthnicityInput = document.querySelector("#outfit-model-ethnicity");
-const outfitPreviewLayers = Object.fromEntries(
-  Array.from(document.querySelectorAll("[data-outfit-preview-layer]")).map((node) => [node.dataset.outfitPreviewLayer, node])
-);
 const outfitHistoryModal = document.querySelector("#outfit-history-modal");
 const outfitHistoryModalPanel = outfitHistoryModal ? outfitHistoryModal.querySelector(".modal-panel") : null;
 const outfitHistoryTrack = document.querySelector("#outfit-history-track");
@@ -287,6 +290,8 @@ let outfitAppliedModelProfile = createDefaultOutfitModelProfile();
 let outfitHistoryItems = [];
 let isOutfitHistoryLoading = false;
 let lastOutfitHistoryTrigger = null;
+let outfitPreviewStageIntervalId = 0;
+let outfitPreviewStageTimeoutId = 0;
 
 try {
   currentWardrobeView = window.localStorage.getItem(WARDROBE_VIEW_KEY) === "list" ? "list" : "board";
@@ -2058,15 +2063,6 @@ function setOutfitGeneratedPreview(url) {
   }
 
   outfitPreviewPanel?.classList.toggle("has-ai-render", Boolean(outfitGeneratedPreviewUrl));
-
-  Object.values(outfitPreviewLayers).forEach((layer) => {
-    if (!layer) {
-      return;
-    }
-
-    layer.hidden = true;
-    layer.innerHTML = "";
-  });
 }
 
 function getOutfitItemMetaText(item) {
@@ -2402,31 +2398,149 @@ function buildOutfitSlotRowMarkup(slot, items) {
   `;
 }
 
-function renderOutfitPreviewLayer(slotKey, item) {
-  const layer = outfitPreviewLayers[slotKey];
+function updateOutfitPreviewProcessing(title, copy) {
+  if (outfitPreviewProcessingTitle) {
+    outfitPreviewProcessingTitle.textContent = title;
+  }
 
-  if (!layer) {
+  if (outfitPreviewProcessingCopy) {
+    outfitPreviewProcessingCopy.textContent = copy;
+  }
+}
+
+function stopOutfitPreviewProgress() {
+  if (outfitPreviewStageIntervalId) {
+    window.clearInterval(outfitPreviewStageIntervalId);
+    outfitPreviewStageIntervalId = 0;
+  }
+
+  if (outfitPreviewStageTimeoutId) {
+    window.clearTimeout(outfitPreviewStageTimeoutId);
+    outfitPreviewStageTimeoutId = 0;
+  }
+}
+
+function startOutfitPreviewProgress() {
+  stopOutfitPreviewProgress();
+
+  const stages = [
+    {
+      title: "正在整理参考衣物",
+      copy: "系统正在核对所选单品、模特设定和参考图板，准备生成试穿图。"
+    },
+    {
+      title: "正在匹配穿搭层次",
+      copy: "AI 正在分析上衣、下装、外套和配饰之间的穿搭关系，避免错穿和漏穿。"
+    },
+    {
+      title: "正在生成试穿画面",
+      copy: "系统正在组合完整人物姿态与整体穿搭效果，请稍候。"
+    },
+    {
+      title: "正在细化成图细节",
+      copy: "AI 正在修整边缘、材质和画面观感，让试穿图更接近最终效果。"
+    }
+  ];
+
+  let stageIndex = 0;
+
+  const renderStage = () => {
+    const stage = stages[Math.min(stageIndex, stages.length - 1)];
+    updateOutfitPreviewProcessing(stage.title, stage.copy);
+  };
+
+  renderStage();
+
+  outfitPreviewStageIntervalId = window.setInterval(() => {
+    if (stageIndex >= stages.length - 1) {
+      window.clearInterval(outfitPreviewStageIntervalId);
+      outfitPreviewStageIntervalId = 0;
+      return;
+    }
+
+    stageIndex += 1;
+    renderStage();
+  }, 3200);
+
+  outfitPreviewStageTimeoutId = window.setTimeout(() => {
+    updateOutfitPreviewProcessing(
+      "正在继续生成，请稍候",
+      "当前生成时间比平时稍长，系统仍在处理穿搭细节和人物成图，请不要关闭页面。"
+    );
+  }, 16_000);
+}
+
+function syncOutfitPreviewCanvasState(groupedItems) {
+  const draftSelectedCount = getSelectedOutfitGarments(outfitDraftSelection, groupedItems).length;
+  const isAuthenticated = Boolean(currentUser && currentSession?.access_token);
+
+  if (outfitPreviewProcessing) {
+    if (isOutfitGenerating) {
+      if (outfitPreviewProcessing.hidden) {
+        startOutfitPreviewProgress();
+      }
+
+      outfitPreviewProcessing.hidden = false;
+    } else {
+      stopOutfitPreviewProgress();
+      outfitPreviewProcessing.hidden = true;
+    }
+  }
+
+  if (!outfitPreviewEmpty) {
     return;
   }
 
-  if (!item) {
-    layer.hidden = true;
-    layer.innerHTML = "";
+  const shouldShowEmpty = !outfitGeneratedPreviewUrl && !isOutfitGenerating;
+  outfitPreviewEmpty.hidden = !shouldShowEmpty;
+
+  if (!shouldShowEmpty) {
     return;
   }
 
-  const imageSource = getOutfitItemPreviewSource(item);
+  if (!draftSelectedCount) {
+    if (outfitPreviewEmptyTitle) {
+      outfitPreviewEmptyTitle.textContent = "AI 穿搭预览将在这里显示";
+    }
 
-  layer.hidden = false;
+    if (outfitPreviewEmptyCopy) {
+      outfitPreviewEmptyCopy.textContent = "先从左侧选择两件或更多衣物，再点击“AI 生成试穿图”。";
+    }
 
-  if (imageSource) {
-    layer.innerHTML = `
-      <img class="outfit-preview-asset" src="${escapeHtml(imageSource)}" alt="${escapeHtml(item.name || "穿搭预览")}">
-    `;
     return;
   }
 
-  layer.innerHTML = `<span class="garment-figure ${getFigureClass(item.type)}"></span>`;
+  if (!isAuthenticated) {
+    if (outfitPreviewEmptyTitle) {
+      outfitPreviewEmptyTitle.textContent = `已选中 ${draftSelectedCount} 件衣物`;
+    }
+
+    if (outfitPreviewEmptyCopy) {
+      outfitPreviewEmptyCopy.textContent = "登录后即可生成完整试穿图，当前搭配会保留在右侧等待你继续。";
+    }
+
+    return;
+  }
+
+  if (!hasOutfitAiConfig()) {
+    if (outfitPreviewEmptyTitle) {
+      outfitPreviewEmptyTitle.textContent = "AI 穿搭功能尚未配置完成";
+    }
+
+    if (outfitPreviewEmptyCopy) {
+      outfitPreviewEmptyCopy.textContent = "请先完成 Supabase 和 AI 函数配置，之后这里会显示完整试穿效果。";
+    }
+
+    return;
+  }
+
+  if (outfitPreviewEmptyTitle) {
+    outfitPreviewEmptyTitle.textContent = `已准备好 ${draftSelectedCount} 件参考衣物`;
+  }
+
+  if (outfitPreviewEmptyCopy) {
+    outfitPreviewEmptyCopy.textContent = "点击“AI 生成试穿图”后，这里会显示完整的穿搭预览。";
+  }
 }
 
 function syncOutfitActionButtons(groupedItems) {
@@ -2478,6 +2592,7 @@ function syncOutfitPreview(groupedItems) {
   const draftModelProfile = readOutfitModelProfile();
   const hasPendingModelProfileChanges = getOutfitModelProfileSignature(draftModelProfile) !== getOutfitModelProfileSignature(outfitAppliedModelProfile);
   setOutfitGeneratedPreview(outfitGeneratedPreviewUrl);
+  syncOutfitPreviewCanvasState(groupedItems);
 
   if (outfitPreviewStatus) {
     const hasDraftSelectionChanges = OUTFIT_SLOT_CONFIG.some((slot) => outfitDraftSelection[slot.key] !== outfitAppliedSelection[slot.key]);
@@ -2681,6 +2796,7 @@ function resetOutfitStudio() {
   applyOutfitModelProfile(outfitAppliedModelProfile);
   setOutfitGeneratedPreview("");
   isOutfitGenerating = false;
+  stopOutfitPreviewProgress();
 
   const groupedItems = groupGarmentsByOutfitSlot();
   syncOutfitSelectionUi(groupedItems);

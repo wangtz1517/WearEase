@@ -363,20 +363,18 @@
             <section class="outfit-preview-panel">
               <div class="outfit-preview-stage">
                 <div class="outfit-preview-canvas">
-                  <div class="outfit-mannequin" aria-hidden="true">
-                    <span class="outfit-mannequin-head"></span>
-                    <span class="outfit-mannequin-torso"></span>
-                    <span class="outfit-mannequin-arm is-left"></span>
-                    <span class="outfit-mannequin-arm is-right"></span>
-                    <span class="outfit-mannequin-leg is-left"></span>
-                    <span class="outfit-mannequin-leg is-right"></span>
+                  <div class="outfit-preview-empty" id="outfit-preview-empty" aria-live="polite">
+                    <p class="outfit-preview-empty-title" id="outfit-preview-empty-title">AI 穿搭预览将在这里显示</p>
+                    <p class="outfit-preview-empty-copy" id="outfit-preview-empty-copy">先从左侧选择衣物，再点击“AI 生成试穿图”。</p>
+                  </div>
+
+                  <div class="outfit-preview-processing" id="outfit-preview-processing" hidden aria-live="polite">
+                    <span class="outfit-preview-spinner" aria-hidden="true"></span>
+                    <p class="outfit-preview-processing-title" id="outfit-preview-processing-title">正在生成穿搭试穿图</p>
+                    <p class="outfit-preview-processing-copy" id="outfit-preview-processing-copy">系统正在整理参考衣物、模特设定和穿搭层次，请稍候。</p>
                   </div>
 
                   <img class="outfit-preview-render" id="outfit-preview-render" alt="AI 生成的穿搭试穿图" hidden>
-                  <div class="outfit-preview-layer outfit-preview-layer--bottom" data-outfit-preview-layer="bottom" hidden></div>
-                  <div class="outfit-preview-layer outfit-preview-layer--top" data-outfit-preview-layer="top" hidden></div>
-                  <div class="outfit-preview-layer outfit-preview-layer--outer" data-outfit-preview-layer="outer" hidden></div>
-                  <div class="outfit-preview-layer outfit-preview-layer--accessory" data-outfit-preview-layer="accessory" hidden></div>
                 </div>
               </div>
 
