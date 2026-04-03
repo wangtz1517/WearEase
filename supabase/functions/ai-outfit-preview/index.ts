@@ -11,7 +11,9 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const VOLCENGINE_API_KEY = Deno.env.get("VOLCENGINE_API_KEY") || "";
 const VOLCENGINE_BASE_URL = (Deno.env.get("VOLCENGINE_BASE_URL") || "https://ark.cn-beijing.volces.com/api/v3").replace(/\/$/, "");
-const VOLCENGINE_IMAGE_MODEL = Deno.env.get("VOLCENGINE_IMAGE_MODEL") || "doubao-seedream-5-0-260128";
+const DEFAULT_VOLCENGINE_IMAGE_MODEL = "doubao-seedream-5-0-260128";
+const VOLCENGINE_OUTFIT_IMAGE_MODEL =
+  (Deno.env.get("VOLCENGINE_OUTFIT_IMAGE_MODEL") || Deno.env.get("VOLCENGINE_IMAGE_MODEL") || DEFAULT_VOLCENGINE_IMAGE_MODEL).trim();
 const GARMENT_IMAGES_BUCKET = Deno.env.get("GARMENT_IMAGES_BUCKET") || "garment-images";
 const MAX_REFERENCE_BOARD_LENGTH = 7_000_000;
 const MAX_OUTFIT_ITEMS = 4;
@@ -431,7 +433,7 @@ async function runOutfitPreview(user: AuthenticatedUser, payload: OutfitPreviewP
         Authorization: `Bearer ${VOLCENGINE_API_KEY}`
       },
       body: JSON.stringify({
-        model: VOLCENGINE_IMAGE_MODEL,
+        model: VOLCENGINE_OUTFIT_IMAGE_MODEL,
         prompt,
         image: payload.referenceBoardDataUrl,
         response_format: "url",

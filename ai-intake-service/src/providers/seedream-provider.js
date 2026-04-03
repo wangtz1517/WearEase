@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import { BaseProvider } from "./base-provider.js";
 
 function extFromMime(mimeType) {
@@ -27,64 +26,62 @@ function buildStandardImagePath(jobContext) {
 
 function getCategoryLabel(category) {
   if (category === "bottom") {
-    return "裤子";
+    return "bottom garment";
   }
 
   if (category === "outer") {
-    return "外套";
+    return "outerwear";
   }
 
   if (category === "dress") {
-    return "裙装";
+    return "dress";
   }
 
   if (category === "accessory") {
-    return "鞋包配饰";
+    return "accessory";
   }
 
-  return "上衣";
+  return "top garment";
 }
 
 function getCategoryRequirement(category) {
   if (category === "bottom") {
-    return "如果输入是裤子，输出必须仍然是同一条裤子，绝对不能变成上衣、外套、裙子或其他品类。裤腰、裤腿、裤脚必须完整可见，裤腿自然展开，左右结构清楚。";
+    return "Preserve waistline, rise, leg shape, pleats, pockets, and hem length details.";
   }
 
   if (category === "outer") {
-    return "如果输入是外套，输出必须仍然是同一件外套，门襟、衣身、袖子要完整，不能变成普通上衣。";
+    return "Preserve collar, lapel, placket, zipper, quilting, pockets, and overall silhouette.";
   }
 
   if (category === "dress") {
-    return "如果输入是裙装，输出必须仍然是同一件裙装，裙摆完整展开，不能改成上衣加下装。";
+    return "Preserve neckline, waist shape, skirt volume, straps, sleeves, and drape.";
   }
 
   if (category === "accessory") {
-    return "如果输入是配饰，输出必须仍然是同一件配饰，不要生成额外物品。";
+    return "Preserve the exact shape, hardware, closure, straps, sole, and decorative details.";
   }
 
-  return "如果输入是上衣，输出必须仍然是同一件上衣，领口、肩线、袖子、下摆完整，不要变成裤子、外套或裙装。";
+  return "Preserve neckline, sleeves, hem shape, buttons, prints, logos, and fabric details.";
 }
 
 function buildPrompt(jobContext) {
-  const garmentName = jobContext?.garmentName?.trim() || "一件衣物";
   const category = jobContext?.categoryHint || "top";
   const categoryLabel = getCategoryLabel(category);
   const categoryRequirement = getCategoryRequirement(category);
 
   return [
-    "请严格基于输入图片中的同一件衣物进行再呈现。",
-    "不要更换品类，不要更换款式，不要更换颜色，不要更换图案，不要更换材质，不要更换结构。",
-    `衣物类型：${categoryLabel}。`,
-    `衣物名称：${garmentName}。`,
+    "Transform the uploaded garment photo into a single clean wardrobe catalog image.",
+    `Garment category: ${categoryLabel}.`,
     categoryRequirement,
-    "最终只能输出一件衣物，画面中禁止出现第二件、第三件或重复衣物。",
-    "禁止生成模特、人体、手、衣架、货架、背景场景、装饰物、文字、水印或品牌海报元素。",
-    "请生成正式、标准、可归档的服装展示图：正面视角，单件主体，居中构图，背景干净。",
-    "衣物边界必须完整，不要裁掉左右两侧、袖口、裤脚、下摆或领口。",
-    "尽量整理和平顺衣物，减少褶皱，避免严重折叠感和扭曲感。",
-    "如果原图有轻微折叠或局部遮挡，请在保持同一件衣物一致性的前提下做合理展开，但不要凭空改变设计。",
-    "输出图应该像电商或归档用的标准单品图，而不是场景图或穿搭图。"
-  ].join("");
+    "Use the uploaded photo as the only garment reference.",
+    "Keep the original garment design, color, silhouette, texture, trims, prints, logos, and proportions accurate.",
+    "Preserve real garment lettering or branding only when it already exists on the clothing in the uploaded photo.",
+    "Do not add any extra text, captions, labels, price tags, typography, packaging graphics, stickers, badges, watermarks, or decorative letters anywhere in the image.",
+    "Remove body parts, hands, hangers, mannequins, background clutter, mirrors, furniture, and extra objects.",
+    "Output one centered isolated garment, front-facing where possible, on a simple clean background.",
+    "Do not create a poster, product card, collage, mood board, or layout with design elements around the garment.",
+    "The result should look like a polished wardrobe inventory image suitable for a digital closet."
+  ].join(" ");
 }
 
 function getGeneratedImageUrl(payload) {
@@ -193,8 +190,8 @@ export class SeedreamProvider extends BaseProvider {
       review: {
         requiresHumanReview: true,
         reasons: [
-          "已调用 Seedream 真实接口生成标准图，当前仍建议人工检查版型、颜色和细节一致性。",
-          "当前版本尚未接入独立抠图或结构理解模型，因此 mask 产物为空。"
+          "Seedream generation completed. Review garment details before saving.",
+          "Check silhouette, color, and small design details because this local provider does not apply an explicit segmentation mask."
         ]
       },
       quality: {

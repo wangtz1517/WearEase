@@ -81,9 +81,12 @@ Minimum production values:
 AI_PROVIDER=seedream
 VOLCENGINE_API_KEY=...
 VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-VOLCENGINE_IMAGE_MODEL=doubao-seedream-5-0-260128
+VOLCENGINE_INTAKE_IMAGE_MODEL=doubao-seedream-5-0-260128
+VOLCENGINE_OUTFIT_IMAGE_MODEL=doubao-seedream-5-0-260128
 GARMENT_IMAGES_BUCKET=garment-images
 ```
+
+`VOLCENGINE_IMAGE_MODEL` still works as a legacy fallback, but using separate intake/outfit model secrets avoids one feature's tuning affecting the other.
 
 You can set them either in the Supabase dashboard or with the CLI.
 
@@ -94,8 +97,15 @@ supabase secrets set \
   AI_PROVIDER=seedream \
   VOLCENGINE_API_KEY=your_key \
   VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3 \
-  VOLCENGINE_IMAGE_MODEL=doubao-seedream-5-0-260128 \
+  VOLCENGINE_INTAKE_IMAGE_MODEL=doubao-seedream-5-0-260128 \
+  VOLCENGINE_OUTFIT_IMAGE_MODEL=doubao-seedream-5-0-260128 \
   GARMENT_IMAGES_BUCKET=garment-images
+```
+
+Current project ref in this repo:
+
+```text
+ipmbtukabmdwyjhqtlju
 ```
 
 ## 5. Edge Function Deployment
@@ -120,8 +130,21 @@ Typical deployment flow:
 
 ```bash
 supabase login
-supabase link --project-ref your-project-ref
+supabase link --project-ref ipmbtukabmdwyjhqtlju
 supabase functions deploy ai-intake
+supabase functions deploy ai-outfit-preview
+```
+
+For Windows PowerShell, this repo also includes:
+
+```powershell
+.\scripts\deploy-supabase-functions.ps1 -VolcengineApiKey "your_key"
+```
+
+If you already updated secrets in the Supabase dashboard and only want to redeploy code:
+
+```powershell
+.\scripts\deploy-supabase-functions.ps1 -SkipSecrets
 ```
 
 This function:

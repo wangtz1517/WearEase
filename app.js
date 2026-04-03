@@ -198,6 +198,7 @@ const CUSTOM_GARMENTS_KEY = "atelier-archive-custom-garments";
 const OUTFIT_HISTORY_KEY = "atelier-archive-outfit-history";
 const WARDROBE_VIEW_KEY = "atelier-archive-wardrobe-view";
 const WARDROBE_VISIBLE_COLUMNS_KEY = "atelier-archive-wardrobe-visible-columns";
+const WARDROBE_VISIBLE_COLUMNS_METADATA_KEY = "wardrobe_visible_columns";
 const WARDROBE_TYPE_OPTIONS = [
   { value: "top", label: "上装" },
   { value: "bottom", label: "下装" },
@@ -293,15 +294,9 @@ try {
   currentWardrobeView = "board";
 }
 
-try {
-  const savedColumns = JSON.parse(window.localStorage.getItem(WARDROBE_VISIBLE_COLUMNS_KEY) || "null");
-
-  if (Array.isArray(savedColumns)) {
-    currentWardrobeVisibleColumns = normalizeWardrobeVisibleColumns(savedColumns);
-  }
-} catch {
-  currentWardrobeVisibleColumns = WARDROBE_DEFAULT_VISIBLE_COLUMNS.slice();
-}
+currentWardrobeVisibleColumns = loadWardrobeVisibleColumnsFromStorageKey(
+  getWardrobeVisibleColumnsStorageKeyForUser("")
+);
 
 function getGarmentCards() {
   return Array.from(document.querySelectorAll(".garment-card[data-garment-id]"));
@@ -342,11 +337,50 @@ function getVisibleWardrobeColumns() {
   return WARDROBE_LIST_COLUMNS.filter((column) => currentWardrobeVisibleColumns.includes(column.field));
 }
 
-function setWardrobeVisibleColumns(fields) {
+function getWardrobeVisibleColumnsStorageKeyForUser(userId = "") {
+  return userId ? `${WARDROBE_VISIBLE_COLUMNS_KEY}:${userId}` : WARDROBE_VISIBLE_COLUMNS_KEY;
+}
+
+function getCurrentWardrobeVisibleColumnsStorageKey() {
+  return getWardrobeVisibleColumnsStorageKeyForUser(currentUser?.id || "");
+}
+
+function hasWardrobeVisibleColumnsStorageKey(storageKey) {
+  try {
+    return window.localStorage.getItem(storageKey) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function loadWardrobeVisibleColumnsFromStorageKey(storageKey) {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || "null");
+    return Array.isArray(parsed) ? normalizeWardrobeVisibleColumns(parsed) : WARDROBE_DEFAULT_VISIBLE_COLUMNS.slice();
+  } catch {
+    return WARDROBE_DEFAULT_VISIBLE_COLUMNS.slice();
+  }
+}
+
+function saveWardrobeVisibleColumnsToStorageKey(storageKey, fields) {
+  window.localStorage.setItem(storageKey, JSON.stringify(normalizeWardrobeVisibleColumns(fields)));
+}
+
+function clearWardrobeVisibleColumnsFromStorageKey(storageKey) {
+  window.localStorage.removeItem(storageKey);
+}
+
+function getWardrobeVisibleColumnsFromAuthUser(user = currentUser) {
+  const savedColumns = user?.user_metadata?.[WARDROBE_VISIBLE_COLUMNS_METADATA_KEY];
+  return Array.isArray(savedColumns) ? normalizeWardrobeVisibleColumns(savedColumns) : [];
+}
+
+function setWardrobeVisibleColumns(fields, options = {}) {
+  const { persistCloud = true } = options;
   currentWardrobeVisibleColumns = normalizeWardrobeVisibleColumns(fields);
 
   try {
-    window.localStorage.setItem(WARDROBE_VISIBLE_COLUMNS_KEY, JSON.stringify(currentWardrobeVisibleColumns));
+    saveWardrobeVisibleColumnsToStorageKey(getCurrentWardrobeVisibleColumnsStorageKey(), currentWardrobeVisibleColumns);
   } catch {
     // Ignore storage errors and keep the in-memory setting.
   }
@@ -354,6 +388,10 @@ function setWardrobeVisibleColumns(fields) {
   renderWardrobeListEditor();
   filterWardrobeCards();
   syncWardrobeColumnPicker();
+
+  if (persistCloud) {
+    syncWardrobeVisibleColumnsToCloudInBackground(currentWardrobeVisibleColumns);
+  }
 }
 
 function getSiteUrl() {
@@ -444,6 +482,21 @@ function canSyncWardrobeToCloud() {
   return Boolean(supabaseClient && currentUser);
 }
 
+function syncCurrentUserMetadata(user) {
+  if (!user || currentUser?.id !== user.id) {
+    return;
+  }
+
+  currentUser = user;
+
+  if (currentSession?.user?.id === user.id) {
+    currentSession = {
+      ...currentSession,
+      user
+    };
+  }
+}
+
 function getGarmentStorageKeyForUser(userId = "") {
   return userId ? `${CUSTOM_GARMENTS_KEY}:${userId}` : CUSTOM_GARMENTS_KEY;
 }
@@ -467,6 +520,104 @@ function saveCustomGarmentsToStorageKey(storageKey, items) {
 
 function clearCustomGarmentsFromStorageKey(storageKey) {
   window.localStorage.removeItem(storageKey);
+}
+
+async function persistWardrobeVisibleColumnsToCloud(fields, userId = currentUser?.id || "") {
+  const client = await ensureSupabaseClient();
+  const normalized = normalizeWardrobeVisibleColumns(fields);
+
+  if (!client || !userId) {
+    return normalized;
+  }
+
+  const currentCloudColumns = getWardrobeVisibleColumnsFromAuthUser(currentUser);
+
+  if (JSON.stringify(currentCloudColumns) === JSON.stringify(normalized)) {
+    return normalized;
+  }
+
+  const existingMetadata = currentUser?.user_metadata && typeof currentUser.user_metadata === "object"
+    ? currentUser.user_metadata
+    : {};
+  const { data, error } = await client.auth.updateUser({
+    data: {
+      ...existingMetadata,
+      [WARDROBE_VISIBLE_COLUMNS_METADATA_KEY]: normalized
+    }
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (data?.user) {
+    syncCurrentUserMetadata(data.user);
+  }
+
+  return normalized;
+}
+
+function syncWardrobeVisibleColumnsToCloudInBackground(fields, userId = currentUser?.id || "") {
+  if (!canSyncWardrobeToCloud() || !userId) {
+    return;
+  }
+
+  persistWardrobeVisibleColumnsToCloud(fields, userId).catch((error) => {
+    handleCloudSyncError(error, "云端列表显示属性同步失败，请稍后再试。");
+  });
+}
+
+async function hydrateWardrobePreferencesFromCloud() {
+  if (!canSyncWardrobeToCloud()) {
+    return;
+  }
+
+  const userId = currentUser.id;
+  const anonymousStorageKey = getWardrobeVisibleColumnsStorageKeyForUser("");
+  const userStorageKey = getWardrobeVisibleColumnsStorageKeyForUser(userId);
+  const cloudColumns = getWardrobeVisibleColumnsFromAuthUser(currentUser);
+
+  if (cloudColumns.length) {
+    setWardrobeVisibleColumns(cloudColumns, { persistCloud: false });
+
+    try {
+      saveWardrobeVisibleColumnsToStorageKey(userStorageKey, cloudColumns);
+    } catch {
+      // Ignore storage errors and keep the in-memory setting.
+    }
+
+    return;
+  }
+
+  const hasCachedUserColumns = hasWardrobeVisibleColumnsStorageKey(userStorageKey);
+  const hasAnonymousColumns = hasWardrobeVisibleColumnsStorageKey(anonymousStorageKey);
+  const fallbackColumns = hasCachedUserColumns
+    ? loadWardrobeVisibleColumnsFromStorageKey(userStorageKey)
+    : hasAnonymousColumns
+      ? loadWardrobeVisibleColumnsFromStorageKey(anonymousStorageKey)
+      : [];
+
+  if (!fallbackColumns.length) {
+    return;
+  }
+
+  setWardrobeVisibleColumns(fallbackColumns, { persistCloud: false });
+
+  try {
+    saveWardrobeVisibleColumnsToStorageKey(userStorageKey, fallbackColumns);
+
+    if (!hasCachedUserColumns && hasAnonymousColumns) {
+      clearWardrobeVisibleColumnsFromStorageKey(anonymousStorageKey);
+    }
+  } catch {
+    // Ignore storage errors and keep the in-memory setting.
+  }
+
+  try {
+    await persistWardrobeVisibleColumnsToCloud(fallbackColumns, userId);
+  } catch (error) {
+    handleCloudSyncError(error, "云端列表显示属性恢复失败，请稍后再试。");
+  }
 }
 
 function mergeGarmentCollections(...collections) {
@@ -3275,6 +3426,7 @@ async function initializeCloudFeatures() {
     syncAuthUi();
 
     if (currentUser) {
+      await hydrateWardrobePreferencesFromCloud();
       await hydrateWardrobeFromCloud();
       await hydrateOutfitHistoryFromCloud();
     }
@@ -3288,12 +3440,17 @@ async function initializeCloudFeatures() {
     syncAuthUi();
 
     if (currentUser) {
+      void hydrateWardrobePreferencesFromCloud();
       void hydrateWardrobeFromCloud();
       void hydrateOutfitHistoryFromCloud();
       return;
     }
 
     setOutfitHistoryItems([]);
+    setWardrobeVisibleColumns(
+      loadWardrobeVisibleColumnsFromStorageKey(getWardrobeVisibleColumnsStorageKeyForUser("")),
+      { persistCloud: false }
+    );
     renderCustomGarments();
     filterWardrobeCards();
   });

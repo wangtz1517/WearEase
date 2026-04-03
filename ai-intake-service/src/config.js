@@ -5,6 +5,7 @@ const workspaceDir = path.resolve(rootDir, "..");
 const storageDir = process.env.STORAGE_DIR
   ? path.resolve(rootDir, process.env.STORAGE_DIR)
   : path.resolve(rootDir, "storage");
+const DEFAULT_VOLCENGINE_IMAGE_MODEL = "doubao-seedream-5-0-260128";
 
 export const config = {
   port: Number(process.env.PORT || 8123),
@@ -16,5 +17,5 @@ export const config = {
   testSourceDir: path.join(workspaceDir, "assets", "ai-test", "source"),
   volcengineApiKey: process.env.VOLCENGINE_API_KEY || "",
   volcengineBaseUrl: process.env.VOLCENGINE_BASE_URL || "https://ark.cn-beijing.volces.com/api/v3",
-  volcengineImageModel: process.env.VOLCENGINE_IMAGE_MODEL || "doubao-seedream-5-0-260128"
+  volcengineImageModel: process.env.VOLCENGINE_INTAKE_IMAGE_MODEL || process.env.VOLCENGINE_IMAGE_MODEL || DEFAULT_VOLCENGINE_IMAGE_MODEL
 };

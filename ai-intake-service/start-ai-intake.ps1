@@ -45,8 +45,12 @@ if (-not $env:AI_PROVIDER) {
   $env:AI_PROVIDER = "seedream"
 }
 
-if (-not $env:VOLCENGINE_IMAGE_MODEL) {
-  $env:VOLCENGINE_IMAGE_MODEL = "doubao-seedream-5-0-260128"
+if (-not $env:VOLCENGINE_INTAKE_IMAGE_MODEL) {
+  if ($env:VOLCENGINE_IMAGE_MODEL) {
+    $env:VOLCENGINE_INTAKE_IMAGE_MODEL = $env:VOLCENGINE_IMAGE_MODEL
+  } else {
+    $env:VOLCENGINE_INTAKE_IMAGE_MODEL = "doubao-seedream-5-0-260128"
+  }
 }
 
 if ($env:AI_PROVIDER -eq "seedream" -and [string]::IsNullOrWhiteSpace($env:VOLCENGINE_API_KEY)) {
@@ -61,7 +65,7 @@ Write-Host ""
 Write-Host "AI Intake Service" -ForegroundColor Cyan
 Write-Host "Provider : $($env:AI_PROVIDER)"
 Write-Host "Port     : $($env:PORT)"
-Write-Host "Model    : $($env:VOLCENGINE_IMAGE_MODEL)"
+Write-Host "Model    : $($env:VOLCENGINE_INTAKE_IMAGE_MODEL)"
 Write-Host ""
 
 node src/server.js

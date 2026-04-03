@@ -12,7 +12,9 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "
 const AI_PROVIDER = (Deno.env.get("AI_PROVIDER") || "seedream").trim().toLowerCase();
 const VOLCENGINE_API_KEY = Deno.env.get("VOLCENGINE_API_KEY") || "";
 const VOLCENGINE_BASE_URL = (Deno.env.get("VOLCENGINE_BASE_URL") || "https://ark.cn-beijing.volces.com/api/v3").replace(/\/$/, "");
-const VOLCENGINE_IMAGE_MODEL = Deno.env.get("VOLCENGINE_IMAGE_MODEL") || "doubao-seedream-5-0-260128";
+const DEFAULT_VOLCENGINE_IMAGE_MODEL = "doubao-seedream-5-0-260128";
+const VOLCENGINE_INTAKE_IMAGE_MODEL =
+  (Deno.env.get("VOLCENGINE_INTAKE_IMAGE_MODEL") || Deno.env.get("VOLCENGINE_IMAGE_MODEL") || DEFAULT_VOLCENGINE_IMAGE_MODEL).trim();
 const GARMENT_IMAGES_BUCKET = Deno.env.get("GARMENT_IMAGES_BUCKET") || "garment-images";
 const MAX_SOURCE_DATA_URL_LENGTH = 5_500_000;
 const VOLCENGINE_REQUEST_TIMEOUT_MS = 90_000;
@@ -171,20 +173,21 @@ async function fetchWithTimeout(
 
 function buildPrompt(payload: IntakePayload) {
   const category = payload.categoryHint || "top";
-  const garmentName = (payload.garmentName || "").trim();
-  const notes = (payload.notes || "").trim();
   const categoryLabel = categoryLabels[category] || "garment";
   const categoryHint = categoryPromptHints[category] || categoryPromptHints.top;
 
+  // Keep the prompt grounded in the uploaded pixels. Text-heavy metadata can cause label hallucinations.
   return [
     "Transform the uploaded garment photo into a single clean wardrobe catalog image.",
     `Garment category: ${categoryLabel}.`,
-    garmentName ? `Garment name: ${garmentName}.` : "",
-    notes ? `User notes: ${notes}.` : "",
     categoryHint,
+    "Use the uploaded photo as the only garment reference.",
     "Keep the original garment design, color, silhouette, texture, trims, prints, logos, and proportions accurate.",
+    "Preserve real garment lettering or branding only when it already exists on the clothing in the uploaded photo.",
+    "Do not add any extra text, captions, labels, price tags, typography, packaging graphics, stickers, badges, watermarks, or decorative letters anywhere in the image.",
     "Remove body parts, hands, hangers, mannequins, background clutter, mirrors, furniture, and extra objects.",
     "Output one centered isolated garment, front-facing where possible, on a simple clean background.",
+    "Do not create a poster, product card, collage, mood board, or layout with design elements around the garment.",
     "The result should look like a polished wardrobe inventory image suitable for a digital closet."
   ]
     .filter(Boolean)
@@ -283,7 +286,7 @@ async function runSeedreamProvider(user: AuthenticatedUser, payload: IntakePaylo
         Authorization: `Bearer ${VOLCENGINE_API_KEY}`
       },
       body: JSON.stringify({
-        model: VOLCENGINE_IMAGE_MODEL,
+        model: VOLCENGINE_INTAKE_IMAGE_MODEL,
         prompt,
         image: payload.sourceImageDataUrl,
         response_format: "url",
