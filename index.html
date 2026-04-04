@@ -6,9 +6,9 @@
   <title>衣橱志 Atelier Archive</title>
   <meta
     name="description"
-    content="衣橱志：温馨、家庭化的个人电子衣柜。通过左侧菜单在首页、衣柜、穿搭和收纳之间切换。"
+    content="衣橱志：温馨、家庭化的个人电子衣柜。通过左侧菜单在首页、衣柜与穿搭之间切换。"
   >
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260405-10">
 </head>
 <body>
   <div class="ambient-blur ambient-left"></div>
@@ -42,10 +42,6 @@
           <span class="menu-mini">✦</span>
           <span class="menu-full">穿搭</span>
         </a>
-        <a href="#storage" data-view-link="storage">
-          <span class="menu-mini">▣</span>
-          <span class="menu-full">收纳</span>
-        </a>
       </nav>
 
       <div class="sidebar-aux">
@@ -66,59 +62,77 @@
         <header class="page-hero compact-hero">
           <div class="page-hero-copy compact-copy">
             <div class="title-pair page-title-pair">
-              <h2>衣橱整体概况</h2>
+              <h2>你的衣橱控制台</h2>
               <p class="eyebrow">首页 / Home</p>
             </div>
-            <p class="hero-text">只保留最核心的总览信息：总衣物、当季可穿、待整理，以及当前季节的整理重点。</p>
+            <p class="hero-text">先看今天要做什么，再继续管理衣柜、添加新衣服或直接进入穿搭。</p>
           </div>
         </header>
 
-        <section class="stats-grid">
+        <section class="glass-panel home-quick-panel">
+          <div class="section-head home-quick-head">
+            <div>
+              <p class="eyebrow">Quick Start</p>
+              <h3>从这里继续</h3>
+            </div>
+            <p class="home-season-note" id="home-season-note"></p>
+          </div>
+
+          <div class="home-action-row">
+            <a class="primary-button inline-button" href="#outfit" data-view-link="outfit">继续搭配</a>
+            <a class="secondary-button inline-button" href="#wardrobe" data-view-link="wardrobe">管理衣柜</a>
+            <a class="ghost-button inline-button" href="#add" data-view-link="add">添加新衣服</a>
+          </div>
+        </section>
+
+        <section class="stats-grid home-metrics">
           <article class="metric-card">
             <p class="metric-label">总衣物</p>
-            <strong>126</strong>
-            <span>含鞋包与配饰</span>
+            <strong id="home-total-count">0</strong>
+            <span id="home-total-copy">已归档的全部单品</span>
           </article>
           <article class="metric-card">
             <p class="metric-label">当季可穿</p>
-            <strong><span data-season-count>42</span></strong>
-            <span data-current-season>当前季节：春季</span>
+            <strong id="home-season-count">0</strong>
+            <span id="home-season-copy">当前季节优先可穿的单品</span>
           </article>
           <article class="metric-card">
             <p class="metric-label">待整理</p>
-            <strong>11</strong>
-            <span>待分类 / 待清洗 / 待收纳</span>
+            <strong id="home-pending-count">0</strong>
+            <span id="home-pending-copy">待分类、待确认或待归位的单品</span>
           </article>
           <article class="metric-card">
-            <p class="metric-label">最近新增</p>
-            <strong>3</strong>
-            <span>本周新录入单品</span>
+            <p class="metric-label">最近录入</p>
+            <strong id="home-recent-count">0</strong>
+            <span id="home-recent-copy">最新加入的归档单品</span>
           </article>
         </section>
 
-        <section class="glass-panel simple-panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Overview</p>
-              <h3>当前衣橱概况</h3>
+        <div class="home-dashboard-grid">
+          <section class="glass-panel home-section-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Recent Additions</p>
+                <h3>最近加入的衣服</h3>
+              </div>
+              <a class="destination-link" href="#wardrobe" data-view-link="wardrobe">打开衣柜</a>
             </div>
-          </div>
 
-          <div class="season-summary">
-            <article class="season-mini">
-              <span>常穿区</span>
-              <strong>左柜 18 件</strong>
-            </article>
-            <article class="season-mini">
-              <span>本季重点</span>
-              <strong>薄外套与针织层</strong>
-            </article>
-            <article class="season-mini">
-              <span>整理建议</span>
-              <strong>先处理未分类衣物</strong>
-            </article>
-          </div>
-        </section>
+            <div class="mini-garment-grid home-recent-grid" id="home-recent-garments"></div>
+          </section>
+
+          <section class="glass-panel home-section-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Recent Looks</p>
+                <h3>最近穿搭</h3>
+              </div>
+              <button class="ghost-button inline-button" type="button" id="home-open-outfit-history">查看全部</button>
+            </div>
+
+            <div class="home-history-grid" id="home-outfit-history"></div>
+          </section>
+        </div>
       </section>
 
       <section class="page-view" data-view="wardrobe" aria-hidden="true">
@@ -343,24 +357,25 @@
         </header>
 
         <section class="glass-panel outfit-studio-panel">
-          <div class="section-head outfit-studio-head">
-            <div>
-              <h3>穿搭预览工作台</h3>
-            </div>
-
-            <div class="outfit-studio-actions">
-              <button class="ghost-button inline-button" type="button" id="outfit-history-button">历史穿搭</button>
-              <button class="secondary-button inline-button" type="button" id="outfit-load-button">AI 生成试穿图</button>
-              <button class="ghost-button inline-button" type="button" id="outfit-reset-button">清空结果</button>
-            </div>
-          </div>
-
           <div class="outfit-studio-layout">
             <section class="outfit-selector-panel">
               <div class="outfit-selector-rows" id="outfit-selector-rows"></div>
             </section>
 
             <section class="outfit-preview-panel">
+              <div class="outfit-preview-toolbar">
+                <div class="outfit-preview-meta">
+                  <div class="tag-row outfit-selection-summary" id="outfit-selected-summary"></div>
+                </div>
+
+                <div class="outfit-preview-tools outfit-studio-actions">
+                  <button class="ghost-button inline-button" type="button" id="outfit-history-button">历史穿搭</button>
+                  <button class="ghost-button inline-button" type="button" id="outfit-model-button">试穿参数</button>
+                  <button class="secondary-button inline-button" type="button" id="outfit-load-button">AI 生成试穿图</button>
+                  <button class="ghost-button inline-button" type="button" id="outfit-reset-button">清空结果</button>
+                </div>
+              </div>
+
               <div class="outfit-preview-stage">
                 <div class="outfit-preview-canvas">
                   <div class="outfit-preview-empty" id="outfit-preview-empty" aria-live="polite">
@@ -378,13 +393,14 @@
                 </div>
               </div>
 
-              <section class="outfit-model-panel" aria-labelledby="outfit-model-panel-title">
+              <section class="outfit-model-panel" role="dialog" aria-modal="true" aria-labelledby="outfit-model-panel-title">
                 <div class="outfit-model-panel-head">
                   <div>
                     <p class="eyebrow">Model Profile</p>
                     <h4 id="outfit-model-panel-title">试穿人物参数</h4>
                   </div>
                   <p class="outfit-model-panel-note">本版暂不上传面部照片，后续可再接入本人面部参考。</p>
+                  <button class="ghost-button modal-close outfit-model-close-button" type="button" data-close-outfit-model>关闭</button>
                 </div>
 
                 <div class="outfit-model-grid">
@@ -422,81 +438,16 @@
                     </div>
                   </label>
                 </div>
+
+                <p class="outfit-model-feedback" id="outfit-model-feedback" hidden></p>
+
+                <div class="outfit-model-modal-actions">
+                  <button class="ghost-button inline-button" type="button" data-close-outfit-model>取消</button>
+                  <button class="primary-button inline-button" type="button" id="outfit-model-save-button">保存默认参数</button>
+                </div>
               </section>
 
-              <p class="outfit-preview-status" id="outfit-preview-status">
-                先从左侧选两件或更多衣服，再点击“AI 生成试穿图”。
-              </p>
-
-              <div class="tag-row outfit-selection-summary" id="outfit-selected-summary"></div>
             </section>
-          </div>
-        </section>
-      </section>
-
-      <section class="page-view" data-view="storage" aria-hidden="true">
-        <header class="page-hero compact-hero">
-          <div class="page-hero-copy compact-copy">
-            <div class="title-pair page-title-pair">
-              <h2>辅助你的收纳</h2>
-              <p class="eyebrow">收纳 / Storage</p>
-            </div>
-            <p class="hero-text">只保留换季最关键的信息：什么该留在外面，什么该收起来。</p>
-
-            <div class="season-switcher" aria-label="切换季节">
-              <button class="season-button active" type="button" data-season="spring">春</button>
-              <button class="season-button" type="button" data-season="summer">夏</button>
-              <button class="season-button" type="button" data-season="autumn">秋</button>
-              <button class="season-button" type="button" data-season="winter">冬</button>
-            </div>
-
-            <p class="season-caption" data-current-season>当前季节：春季</p>
-          </div>
-        </header>
-
-        <section class="glass-panel simple-panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Seasonal Plan</p>
-              <h3>整理建议</h3>
-            </div>
-            <span class="status-pill muted" data-seasonal-status>当前推荐：春季温和区间</span>
-          </div>
-
-          <div class="season-summary">
-            <article class="season-mini">
-              <span>留在外面</span>
-              <strong data-season-keep-count>42 件</strong>
-            </article>
-            <article class="season-mini">
-              <span>建议收纳</span>
-              <strong data-season-store-count>18 件</strong>
-            </article>
-            <article class="season-mini">
-              <span>优先整理</span>
-              <strong data-season-focus-text>厚针织与围巾</strong>
-            </article>
-          </div>
-
-          <div class="season-board">
-            <div class="season-column keep-column">
-              <h4>建议留在外面的衣物</h4>
-              <ul data-season-keep-list>
-                <li>轻薄衬衫 8 件</li>
-                <li>常规针织 6 件</li>
-                <li>春季外套 4 件</li>
-                <li>通勤裤装 7 件</li>
-              </ul>
-            </div>
-            <div class="season-column store-column">
-              <h4>建议收纳起来的衣物</h4>
-              <ul data-season-store-list>
-                <li>厚羽绒 3 件</li>
-                <li>重磅毛衣 5 件</li>
-                <li>冬季围巾手套 6 件</li>
-                <li>厚绒外套 4 件</li>
-              </ul>
-            </div>
           </div>
         </section>
       </section>
@@ -518,6 +469,8 @@
           <div class="outfit-history-track" id="outfit-history-track"></div>
         </div>
       </div>
+
+      <div class="modal-backdrop" id="outfit-model-modal" hidden></div>
 
       <div class="modal-backdrop" id="add-garment-modal" hidden>
         <div class="modal-panel add-garment-modal" role="dialog" aria-modal="true" aria-labelledby="add-garment-title">
@@ -631,8 +584,8 @@
     </main>
   </div>
 
-  <script src="./public-config.js"></script>
+  <script src="./public-config.js?v=20260405-10"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=20260405-10"></script>
 </body>
 </html>
