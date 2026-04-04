@@ -3,21 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f6efe6">
   <title>衣橱志 Atelier Archive</title>
   <meta
     name="description"
     content="衣橱志：温馨、家庭化的个人电子衣柜。通过左侧菜单在首页、衣柜与穿搭之间切换。"
   >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  >
   <link rel="stylesheet" href="./styles.css?v=20260405-10">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">跳到主内容</a>
   <div class="ambient-blur ambient-left"></div>
   <div class="ambient-blur ambient-right"></div>
 
   <div class="page-shell">
     <aside class="sidebar">
       <a class="brand-block" href="#home" data-view-link="home">
-        <span class="brand-mini">
+        <span class="brand-mini" aria-hidden="true">
           <span class="brand-mini-char">衣</span>
           <span class="brand-mini-char">橱</span>
           <span class="brand-mini-char">志</span>
@@ -31,33 +40,33 @@
 
       <nav class="sidebar-nav">
         <a href="#home" data-view-link="home">
-          <span class="menu-mini">⌂</span>
+          <span class="menu-mini" aria-hidden="true">⌂</span>
           <span class="menu-full">首页</span>
         </a>
         <a href="#wardrobe" data-view-link="wardrobe">
-          <span class="menu-mini">◫</span>
+          <span class="menu-mini" aria-hidden="true">◫</span>
           <span class="menu-full">衣柜</span>
         </a>
         <a href="#outfit" data-view-link="outfit">
-          <span class="menu-mini">✦</span>
+          <span class="menu-mini" aria-hidden="true">✦</span>
           <span class="menu-full">穿搭</span>
         </a>
       </nav>
 
       <div class="sidebar-aux">
         <button class="sidebar-utility-link" type="button" aria-label="账号与云端" data-open-auth-modal>
-          <span class="menu-mini">◎</span>
+          <span class="menu-mini" aria-hidden="true">◎</span>
           <span class="menu-full" id="auth-trigger-label">账号与云端</span>
         </button>
         <button class="sidebar-utility-link" type="button" aria-label="设置">
-          <span class="menu-mini">⚙</span>
+          <span class="menu-mini" aria-hidden="true">⚙</span>
           <span class="menu-full">设置</span>
         </button>
 
       </div>
     </aside>
 
-    <main class="main-content">
+    <main class="main-content" id="main-content" tabindex="-1">
       <section class="page-view is-active" data-view="home" aria-hidden="false">
         <header class="page-hero compact-hero">
           <div class="page-hero-copy compact-copy">
@@ -176,7 +185,7 @@
             <div class="wardrobe-list-actions">
               <label class="search-shell light-shell wardrobe-search-shell">
                 <span>衣柜搜索</span>
-                <input id="wardrobe-search-input" type="text" placeholder="搜索衣物名称、位置或标签">
+                <input id="wardrobe-search-input" name="wardrobe_search" type="text" autocomplete="off" placeholder="搜索衣物名称、位置或标签…">
               </label>
 
               <div class="wardrobe-state-row" data-toggle-group data-wardrobe-state-group>
@@ -199,8 +208,9 @@
           </div>
 
           <div class="wardrobe-grid" id="wardrobe-grid">
-            <article
+            <button
               class="garment-card active-card"
+              type="button"
               data-garment-id="oxford-blue-shirt"
               data-garment-type="top"
               data-garment-state="frequent"
@@ -221,10 +231,11 @@
                 <span>常穿</span>
                 <span>最近 7 天穿过</span>
               </div>
-            </article>
+            </button>
 
-            <article
+            <button
               class="garment-card"
+              type="button"
               data-garment-id="khaki-short-jacket"
               data-garment-type="outer"
               data-garment-state="active"
@@ -245,10 +256,11 @@
                 <span>春季核心</span>
                 <span>易搭配</span>
               </div>
-            </article>
+            </button>
 
-            <article
+            <button
               class="garment-card"
+              type="button"
               data-garment-id="charcoal-tapered-trousers"
               data-garment-type="bottom"
               data-garment-state="frequent"
@@ -269,10 +281,11 @@
                 <span>正式感</span>
                 <span>常穿</span>
               </div>
-            </article>
+            </button>
 
-            <article
+            <button
               class="garment-card"
+              type="button"
               data-garment-id="cream-knitwear"
               data-garment-type="top"
               data-garment-state="active"
@@ -293,10 +306,11 @@
                 <span>柔软层</span>
                 <span>温差备用</span>
               </div>
-            </article>
+            </button>
 
-            <article
+            <button
               class="garment-card"
+              type="button"
               data-garment-id="forest-midi-skirt"
               data-garment-type="bottom"
               data-garment-state="pending"
@@ -317,10 +331,11 @@
                 <span>轻盈感</span>
                 <span>周末优先</span>
               </div>
-            </article>
+            </button>
 
-            <article
+            <button
               class="garment-card"
+              type="button"
               data-garment-id="brown-loafers"
               data-garment-type="accessory"
               data-garment-state="frequent"
@@ -341,7 +356,7 @@
                 <span>高利用率</span>
                 <span>易清洁</span>
               </div>
-            </article>
+            </button>
           </div>
         </section>
       </section>
@@ -389,7 +404,7 @@
                     <p class="outfit-preview-processing-copy" id="outfit-preview-processing-copy">系统正在整理参考衣物、模特设定和穿搭层次，请稍候。</p>
                   </div>
 
-                  <img class="outfit-preview-render" id="outfit-preview-render" alt="AI 生成的穿搭试穿图" hidden>
+                  <img class="outfit-preview-render" id="outfit-preview-render" alt="AI 生成的穿搭试穿图" width="960" height="1440" hidden>
                 </div>
               </div>
 
@@ -406,7 +421,7 @@
                 <div class="outfit-model-grid">
                   <label class="outfit-model-field">
                     <span>性别</span>
-                    <select id="outfit-model-gender">
+                    <select id="outfit-model-gender" name="outfit_model_gender" autocomplete="off">
                       <option value="">默认模特</option>
                       <option value="female">女</option>
                       <option value="male">男</option>
@@ -415,7 +430,7 @@
 
                   <label class="outfit-model-field">
                     <span>人种</span>
-                    <select id="outfit-model-ethnicity">
+                    <select id="outfit-model-ethnicity" name="outfit_model_ethnicity" autocomplete="off">
                       <option value="asian" selected>亚洲人</option>
                       <option value="white">白人</option>
                       <option value="black">黑人</option>
@@ -425,7 +440,7 @@
                   <label class="outfit-model-field">
                     <span>身高</span>
                     <div class="outfit-model-input-wrap">
-                      <input id="outfit-model-height" type="number" inputmode="numeric" min="120" max="220" step="1" placeholder="170">
+                      <input id="outfit-model-height" name="outfit_model_height" type="number" inputmode="numeric" min="120" max="220" step="1" autocomplete="off" placeholder="170…">
                       <span class="outfit-model-unit">cm</span>
                     </div>
                   </label>
@@ -433,7 +448,7 @@
                   <label class="outfit-model-field">
                     <span>体重</span>
                     <div class="outfit-model-input-wrap">
-                      <input id="outfit-model-weight" type="number" inputmode="numeric" min="30" max="180" step="1" placeholder="55">
+                      <input id="outfit-model-weight" name="outfit_model_weight" type="number" inputmode="numeric" min="30" max="180" step="1" autocomplete="off" placeholder="55…">
                       <span class="outfit-model-unit">kg</span>
                     </div>
                   </label>
@@ -525,6 +540,7 @@
                 class="embedded-intake-frame"
                 id="embedded-intake-frame"
                 title="衣物 AI 标准化处理台"
+                loading="lazy"
                 src="./studio/intake-studio.html"
               ></iframe>
             </section>
@@ -561,12 +577,12 @@
             <form class="auth-form" id="auth-form">
               <label class="auth-field">
                 <span>邮箱</span>
-                <input id="auth-email-input" type="email" autocomplete="email" placeholder="name@example.com" required>
+                <input id="auth-email-input" name="email" type="email" autocomplete="email" spellcheck="false" placeholder="name@example.com…" required>
               </label>
 
               <label class="auth-field">
                 <span>密码</span>
-                <input id="auth-password-input" type="password" autocomplete="current-password" minlength="6" placeholder="至少 6 位" required>
+                <input id="auth-password-input" name="password" type="password" autocomplete="current-password" minlength="6" placeholder="至少 6 位…" required>
               </label>
 
               <p class="auth-form-hint" id="auth-session-copy">未登录时，仍然可以本地使用，但不会同步到云端。</p>

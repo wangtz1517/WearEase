@@ -853,7 +853,7 @@ function ensureAddViewNavigation() {
   link.href = "#add";
   link.dataset.viewLink = "add";
   link.innerHTML = `
-    <span class="menu-mini">＋</span>
+    <span class="menu-mini" aria-hidden="true">＋</span>
     <span class="menu-full">新增</span>
   `;
 
@@ -892,6 +892,7 @@ function ensureAddViewPage() {
         <iframe
           class="embedded-intake-frame add-view-frame"
           title="衣物 AI 标准化处理台"
+          loading="lazy"
           src="./studio/intake-studio.html?embed=1"
         ></iframe>
       </section>
@@ -950,11 +951,11 @@ function buildHomeRecentGarmentCardMarkup(item) {
   const footer = escapeHtml(item.footer || item.frequency || "刚加入衣柜");
   const imageSource = item.imageUrl || item.imageDataUrl || "";
   const image = imageSource
-    ? `<img class="garment-photo" src="${imageSource}" alt="${name}">`
+    ? `<img class="garment-photo" src="${escapeHtml(imageSource)}" alt="${name}" width="320" height="320" loading="lazy" decoding="async">`
     : `<div class="garment-figure ${getFigureClass(item.type)}"></div>`;
 
   return `
-    <article class="mini-garment-card home-garment-card" tabindex="0" role="button" data-home-garment-id="${escapeHtml(item.id)}">
+    <button class="mini-garment-card home-garment-card" type="button" data-home-garment-id="${escapeHtml(item.id)}">
       <span class="card-ribbon">${ribbon}</span>
       ${image}
       <h4>${name}</h4>
@@ -963,7 +964,7 @@ function buildHomeRecentGarmentCardMarkup(item) {
         <span>${status}</span>
         <span>${footer}</span>
       </div>
-    </article>
+    </button>
   `;
 }
 
@@ -992,7 +993,7 @@ function buildHomeOutfitHistoryCardMarkup(entry) {
   return `
     <article class="home-outfit-card">
       <div class="outfit-history-image-shell">
-        <img class="outfit-history-image" src="${escapeHtml(entry.imageUrl)}" alt="最近穿搭预览">
+        <img class="outfit-history-image" src="${escapeHtml(entry.imageUrl)}" alt="最近穿搭预览" width="720" height="960" loading="lazy" decoding="async">
       </div>
       <div class="outfit-history-copy">
         <div class="outfit-history-meta">
@@ -2160,7 +2161,7 @@ function buildOutfitHistoryCardMarkup(entry) {
   return `
     <article class="outfit-history-card">
       <div class="outfit-history-image-shell">
-        <img class="outfit-history-image" src="${escapeHtml(entry.imageUrl)}" alt="历史穿搭效果图">
+        <img class="outfit-history-image" src="${escapeHtml(entry.imageUrl)}" alt="历史穿搭效果图" width="720" height="960" loading="lazy" decoding="async">
       </div>
       <div class="outfit-history-copy">
         <div class="outfit-history-meta">
@@ -2776,7 +2777,7 @@ function buildOutfitOptionVisualMarkup(item, slotKey) {
   if (imageSource) {
     return `
       <span class="outfit-option-visual">
-        <img class="outfit-option-photo" src="${escapeHtml(imageSource)}" alt="${escapeHtml(item.name || "衣物预览")}">
+        <img class="outfit-option-photo" src="${escapeHtml(imageSource)}" alt="${escapeHtml(item.name || "衣物预览")}" width="320" height="320" loading="lazy" decoding="async">
       </span>
     `;
   }
@@ -3724,7 +3725,7 @@ function buildCustomGarmentCardMarkup(item) {
   const footer = escapeHtml(item.footer || "刚加入衣柜");
   const imageSource = item.imageUrl || item.imageDataUrl || "";
   const image = imageSource
-    ? `<img class="garment-photo" src="${imageSource}" alt="${name}">`
+    ? `<img class="garment-photo" src="${escapeHtml(imageSource)}" alt="${name}" width="320" height="320" loading="lazy" decoding="async">`
     : `<div class="garment-figure ${getFigureClass(item.type)}"></div>`;
 
   return `
@@ -3740,9 +3741,9 @@ function buildCustomGarmentCardMarkup(item) {
 }
 
 function createCustomGarmentCard(item) {
-  const card = document.createElement("article");
+  const card = document.createElement("button");
   card.className = "garment-card custom-garment-card";
-  card.tabIndex = 0;
+  card.type = "button";
   card.dataset.garmentId = item.id;
   card.dataset.garmentType = item.type;
   card.dataset.garmentState = item.state;
@@ -3891,10 +3892,6 @@ function renderCustomGarments() {
     wardrobeGrid.prepend(createCustomGarmentCard(item));
   });
 
-  getGarmentCards().forEach((card) => {
-    card.tabIndex = 0;
-  });
-
   updateWardrobeSummaryCounts();
   syncWardrobeFilterCountLabels();
   refreshSearchEntries();
@@ -3991,14 +3988,14 @@ function renderSearchResults(query) {
   }
 
   matches.forEach((entry) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "search-result";
-    button.dataset.resultView = entry.view;
-    button.dataset.resultType = entry.type;
-    button.dataset.resultId = entry.id;
-    button.innerHTML = `<strong>${entry.title}</strong><span>${entry.subtitle}</span>`;
-    globalSearchResults.appendChild(button);
+    const link = document.createElement("a");
+    link.href = `#${entry.view}`;
+    link.className = "search-result";
+    link.dataset.resultView = entry.view;
+    link.dataset.resultType = entry.type;
+    link.dataset.resultId = entry.id;
+    link.innerHTML = `<strong>${entry.title}</strong><span>${entry.subtitle}</span>`;
+    globalSearchResults.appendChild(link);
   });
 
   globalSearchResults.hidden = false;
@@ -4334,23 +4331,6 @@ homeRecentGarments?.addEventListener("click", (event) => {
   openWardrobeAndSelectGarment(card.dataset.homeGarmentId || "");
 });
 
-homeRecentGarments?.addEventListener("keydown", (event) => {
-  if (!(event.target instanceof Element)) {
-    return;
-  }
-
-  const card = event.target.closest("[data-home-garment-id]");
-
-  if (!card) {
-    return;
-  }
-
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    openWardrobeAndSelectGarment(card.dataset.homeGarmentId || "");
-  }
-});
-
 homeOutfitHistory?.addEventListener("click", (event) => {
   if (!(event.target instanceof Element)) {
     return;
@@ -4374,19 +4354,6 @@ if (wardrobeGrid) {
     }
 
     selectGarment(card.dataset.garmentId);
-  });
-
-  wardrobeGrid.addEventListener("keydown", (event) => {
-    const card = event.target.closest("[data-garment-id]");
-
-    if (!card) {
-      return;
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectGarment(card.dataset.garmentId);
-    }
   });
 }
 
@@ -4586,6 +4553,12 @@ if (globalSearchResults) {
     if (!button || !button.dataset.resultView) {
       return;
     }
+
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    event.preventDefault();
 
     const { resultView, resultType, resultId } = button.dataset;
     if (window.location.hash === `#${resultView}`) {

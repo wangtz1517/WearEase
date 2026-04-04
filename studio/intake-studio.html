@@ -3,15 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f6efe6">
   <title>新增你的衣物 | AI 处理台</title>
   <meta
     name="description"
     content="上传衣物原图，生成标准归档图，并将结果加入主衣柜。"
   >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  >
   <link rel="stylesheet" href="./intake-studio.css">
 </head>
 <body>
-  <main class="studio-shell">
+  <a class="skip-link" href="#studio-main">跳到主内容</a>
+  <main class="studio-shell" id="studio-main" tabindex="-1">
     <header class="studio-header">
       <a class="back-link" href="../index.html#add">返回新增页</a>
       <div class="header-copy">
@@ -48,37 +58,37 @@
             <div class="control-fields">
               <label class="field">
                 <span>衣物名称</span>
-                <input id="garment-name" type="text" placeholder="例如：奶白色针织开衫">
+                <input id="garment-name" name="garment_name" type="text" autocomplete="off" placeholder="例如：奶白色针织开衫…">
               </label>
 
               <label class="field">
                 <span>收纳位置</span>
-                <input id="garment-location" type="text" value="待整理">
+                <input id="garment-location" name="garment_location" type="text" autocomplete="off" value="待整理">
               </label>
 
               <label class="field">
                 <span>颜色标签</span>
-                <input id="garment-color" type="text" value="待确认">
+                <input id="garment-color" name="garment_color" type="text" autocomplete="off" value="待确认">
               </label>
 
               <label class="field">
                 <span>季节标签</span>
-                <input id="garment-season" type="text" value="待确认">
+                <input id="garment-season" name="garment_season" type="text" autocomplete="off" value="待确认">
               </label>
 
               <label class="field">
                 <span>购入时间</span>
-                <input id="garment-purchase-date" type="date">
+                <input id="garment-purchase-date" name="garment_purchase_date" type="date" autocomplete="off">
               </label>
 
               <label class="field">
                 <span>价格</span>
-                <input id="garment-price" type="text" placeholder="例如：299">
+                <input id="garment-price" name="garment_price" type="text" inputmode="decimal" autocomplete="off" placeholder="例如：299…">
               </label>
 
               <label class="field field-wide">
                 <span>品牌备注</span>
-                <input id="garment-brand" type="text" placeholder="例如：优衣库 / 淘宝店铺">
+                <input id="garment-brand" name="garment_brand" type="text" autocomplete="off" placeholder="例如：优衣库 / 淘宝店铺…">
               </label>
             </div>
           </div>
@@ -100,7 +110,7 @@
             </div>
           </div>
 
-          <input id="file-input" type="file" accept="image/*" hidden>
+          <input id="file-input" name="source_image" type="file" accept="image/*" hidden>
 
           <div class="preview-workbench">
             <div class="preview-stage checker tall workbench-stage" id="dropzone" tabindex="0" aria-label="上传衣物照片">
@@ -135,7 +145,7 @@
 
           <article class="archive-preview-card" id="archive-summary">
             <div class="archive-preview-media">
-              <img id="archive-preview-image" alt="" aria-hidden="true" hidden>
+              <img id="archive-preview-image" alt="" aria-hidden="true" width="320" height="320" hidden>
               <div class="archive-preview-empty" id="archive-preview-empty" aria-hidden="true"></div>
             </div>
 
