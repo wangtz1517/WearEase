@@ -16,7 +16,7 @@
     href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;600;700&display=swap"
     rel="stylesheet"
   >
-  <link rel="stylesheet" href="./styles.css?v=20260405-10">
+  <link rel="stylesheet" href="./styles.css?v=20260405-15">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主内容</a>
@@ -40,26 +40,58 @@
 
       <nav class="sidebar-nav">
         <a href="#home" data-view-link="home">
-          <span class="menu-mini" aria-hidden="true">⌂</span>
+          <span class="menu-mini" aria-hidden="true">
+            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4.5 10.5 12 4l7.5 6.5V20a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z" />
+            </svg>
+          </span>
           <span class="menu-full">首页</span>
         </a>
         <a href="#wardrobe" data-view-link="wardrobe">
-          <span class="menu-mini" aria-hidden="true">◫</span>
+          <span class="menu-mini" aria-hidden="true">
+            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="4.5" width="14" height="15" rx="2.2" />
+              <path d="M12 4.5v15" />
+              <path d="M10 11v1.5" />
+              <path d="M14 11v1.5" />
+            </svg>
+          </span>
           <span class="menu-full">衣柜</span>
         </a>
         <a href="#outfit" data-view-link="outfit">
-          <span class="menu-mini" aria-hidden="true">✦</span>
+          <span class="menu-mini" aria-hidden="true">
+            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 4.5 13.9 10.1 19.5 12 13.9 13.9 12 19.5 10.1 13.9 4.5 12 10.1 10.1Z" />
+            </svg>
+          </span>
           <span class="menu-full">穿搭</span>
         </a>
       </nav>
 
       <div class="sidebar-aux">
         <button class="sidebar-utility-link" type="button" aria-label="账号与云端" data-open-auth-modal>
-          <span class="menu-mini" aria-hidden="true">◎</span>
+          <span class="menu-mini" aria-hidden="true">
+            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="6.2" />
+              <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" />
+            </svg>
+          </span>
           <span class="menu-full" id="auth-trigger-label">账号与云端</span>
         </button>
         <button class="sidebar-utility-link" type="button" aria-label="设置">
-          <span class="menu-mini" aria-hidden="true">⚙</span>
+          <span class="menu-mini" aria-hidden="true">
+            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3.1" />
+              <path d="M12 4.3v2.1" />
+              <path d="M12 17.6v2.1" />
+              <path d="M19.7 12h-2.1" />
+              <path d="M6.4 12H4.3" />
+              <path d="m17.4 6.6-1.5 1.5" />
+              <path d="m8.1 15.9-1.5 1.5" />
+              <path d="m17.4 17.4-1.5-1.5" />
+              <path d="m8.1 8.1-1.5-1.5" />
+            </svg>
+          </span>
           <span class="menu-full">设置</span>
         </button>
 
@@ -68,54 +100,73 @@
 
     <main class="main-content" id="main-content" tabindex="-1">
       <section class="page-view is-active" data-view="home" aria-hidden="false">
-        <header class="page-hero compact-hero">
-          <div class="page-hero-copy compact-copy">
-            <div class="title-pair page-title-pair">
-              <h2>你的衣橱控制台</h2>
-              <p class="eyebrow">首页 / Home</p>
-            </div>
-            <p class="hero-text">先看今天要做什么，再继续管理衣柜、添加新衣服或直接进入穿搭。</p>
+        <header class="page-hero compact-hero page-ribbon home-ribbon">
+          <div class="home-ribbon-copy">
+            <p class="eyebrow page-ribbon-kicker">首页 / Home</p>
+            <h2>你的衣橱控制台</h2>
+            <p class="home-ribbon-intro">把当季重点、最近变化和下一步动作放在同一个工作面里，先看清楚，再继续搭配和整理。</p>
+          </div>
+          <div class="home-ribbon-status">
+            <p class="page-ribbon-note">今日总览</p>
+            <p class="home-ribbon-meta" id="home-ribbon-meta"></p>
           </div>
         </header>
 
-        <section class="glass-panel home-quick-panel">
-          <div class="section-head home-quick-head">
-            <div>
-              <p class="eyebrow">Quick Start</p>
-              <h3>从这里继续</h3>
+        <div class="home-overview-grid">
+          <section class="glass-panel home-quick-panel home-action-panel">
+            <div class="section-head home-quick-head">
+              <div>
+                <p class="eyebrow">Quick Start</p>
+                <h3>从这里继续</h3>
+              </div>
+              <p class="home-season-note" id="home-season-note"></p>
             </div>
-            <p class="home-season-note" id="home-season-note"></p>
-          </div>
 
-          <div class="home-action-row">
-            <a class="primary-button inline-button" href="#outfit" data-view-link="outfit">继续搭配</a>
-            <a class="secondary-button inline-button" href="#wardrobe" data-view-link="wardrobe">管理衣柜</a>
-            <a class="ghost-button inline-button" href="#add" data-view-link="add">添加新衣服</a>
-          </div>
-        </section>
+            <p class="home-action-copy" id="home-next-step"></p>
 
-        <section class="stats-grid home-metrics">
-          <article class="metric-card">
-            <p class="metric-label">总衣物</p>
-            <strong id="home-total-count">0</strong>
-            <span id="home-total-copy">已归档的全部单品</span>
-          </article>
-          <article class="metric-card">
-            <p class="metric-label">当季可穿</p>
-            <strong id="home-season-count">0</strong>
-            <span id="home-season-copy">当前季节优先可穿的单品</span>
-          </article>
-          <article class="metric-card">
-            <p class="metric-label">待整理</p>
-            <strong id="home-pending-count">0</strong>
-            <span id="home-pending-copy">待分类、待确认或待归位的单品</span>
-          </article>
-          <article class="metric-card">
-            <p class="metric-label">最近录入</p>
-            <strong id="home-recent-count">0</strong>
-            <span id="home-recent-copy">最新加入的归档单品</span>
-          </article>
-        </section>
+            <div class="home-action-row">
+              <a class="primary-button inline-button" href="#outfit" data-view-link="outfit">继续搭配</a>
+              <a class="secondary-button inline-button" href="#wardrobe" data-view-link="wardrobe">管理衣柜</a>
+              <a class="ghost-button inline-button" href="#add" data-view-link="add">添加新衣服</a>
+            </div>
+
+            <div class="home-quick-points">
+              <article class="home-quick-point">
+                <p class="eyebrow">衣橱节奏</p>
+                <strong id="home-pulse-title">衣橱正在建立中</strong>
+                <p id="home-pulse-copy">录入几件常穿衣物后，这里会开始显示最近的变化节奏。</p>
+              </article>
+              <article class="home-quick-point">
+                <p class="eyebrow">当前重点</p>
+                <strong id="home-focus-title">先建立当季基础</strong>
+                <p id="home-focus-copy">围绕当季可穿单品建立稳定的首页和搭配节奏，再去补充细分信息。</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="stats-grid home-metrics">
+            <article class="metric-card home-metric-card home-metric-archive">
+              <p class="metric-label">总衣物</p>
+              <strong id="home-total-count">0</strong>
+              <span id="home-total-copy">已归档的全部单品</span>
+            </article>
+            <article class="metric-card home-metric-card home-metric-season">
+              <p class="metric-label">当季可穿</p>
+              <strong id="home-season-count">0</strong>
+              <span id="home-season-copy">当前季节优先可穿的单品</span>
+            </article>
+            <article class="metric-card home-metric-card home-metric-pending">
+              <p class="metric-label">待整理</p>
+              <strong id="home-pending-count">0</strong>
+              <span id="home-pending-copy">待分类、待确认或待归位的单品</span>
+            </article>
+            <article class="metric-card home-metric-card home-metric-recent">
+              <p class="metric-label">最近录入</p>
+              <strong id="home-recent-count">0</strong>
+              <span id="home-recent-copy">最新加入的归档单品</span>
+            </article>
+          </section>
+        </div>
 
         <div class="home-dashboard-grid">
           <section class="glass-panel home-section-panel">
@@ -145,34 +196,10 @@
       </section>
 
       <section class="page-view" data-view="wardrobe" aria-hidden="true">
-        <header class="page-hero compact-hero wardrobe-hero">
-          <div class="page-hero-copy compact-copy wardrobe-head-card">
-            <div class="wardrobe-head-row">
-              <div class="wardrobe-head-copy title-pair">
-                <h2>管理全部衣物</h2>
-                <p class="eyebrow">衣柜 / Wardrobe</p>
-              </div>
-
-              <div class="wardrobe-summary-strip">
-                <article class="wardrobe-summary-item">
-                  <span>上装</span>
-                  <strong>38</strong>
-                </article>
-                <article class="wardrobe-summary-item">
-                  <span>下装</span>
-                  <strong>24</strong>
-                </article>
-                <article class="wardrobe-summary-item">
-                  <span>外套</span>
-                  <strong>17</strong>
-                </article>
-                <article class="wardrobe-summary-item">
-                  <span>鞋包配饰</span>
-                  <strong>47</strong>
-                </article>
-              </div>
-            </div>
-          </div>
+        <header class="page-hero compact-hero page-ribbon wardrobe-hero">
+          <p class="eyebrow page-ribbon-kicker">衣柜 / Wardrobe</p>
+          <h2>管理全部衣物</h2>
+          <p class="page-ribbon-note">全部归档</p>
         </header>
 
         <section class="glass-panel wardrobe-list-panel">
@@ -362,13 +389,10 @@
       </section>
 
       <section class="page-view" data-view="outfit" aria-hidden="true">
-        <header class="page-hero compact-hero">
-          <div class="page-hero-copy compact-copy">
-            <div class="title-pair page-title-pair">
-              <h2>生成你的搭配</h2>
-              <p class="eyebrow">穿搭 / Outfit</p>
-            </div>
-          </div>
+        <header class="page-hero compact-hero page-ribbon">
+          <p class="eyebrow page-ribbon-kicker">穿搭 / Outfit</p>
+          <h2>生成你的搭配</h2>
+          <p class="page-ribbon-note">试穿工作台</p>
         </header>
 
         <section class="glass-panel outfit-studio-panel">
@@ -600,8 +624,8 @@
     </main>
   </div>
 
-  <script src="./public-config.js?v=20260405-10"></script>
+  <script src="./public-config.js?v=20260405-15"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./app.js?v=20260405-10"></script>
+  <script src="./app.js?v=20260405-15"></script>
 </body>
 </html>

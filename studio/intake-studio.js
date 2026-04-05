@@ -89,6 +89,51 @@ if (IS_EMBED_MODE) {
   document.body.classList.add("embed-mode");
 }
 
+function getEmbedHeight() {
+  const studioShell = document.querySelector(".studio-shell");
+  const bodyHeight = document.body?.scrollHeight || 0;
+  const documentHeight = document.documentElement?.scrollHeight || 0;
+  const shellHeight = studioShell?.scrollHeight || 0;
+
+  return Math.ceil(Math.max(bodyHeight, documentHeight, shellHeight));
+}
+
+function postEmbedHeight() {
+  if (!IS_EMBED_MODE || window.parent === window) {
+    return;
+  }
+
+  window.parent.postMessage({
+    type: "ai-intake:embed-height",
+    height: getEmbedHeight()
+  }, "*");
+}
+
+function bindEmbedHeightReporter() {
+  if (!IS_EMBED_MODE) {
+    return;
+  }
+
+  const target = document.querySelector(".studio-shell") || document.body;
+
+  if ("ResizeObserver" in window && target) {
+    const observer = new ResizeObserver(() => {
+      window.requestAnimationFrame(postEmbedHeight);
+    });
+
+    observer.observe(target);
+  }
+
+  window.addEventListener("load", postEmbedHeight);
+  window.addEventListener("resize", () => {
+    window.requestAnimationFrame(postEmbedHeight);
+  });
+
+  window.setTimeout(postEmbedHeight, 0);
+  window.setTimeout(postEmbedHeight, 220);
+  window.setTimeout(postEmbedHeight, 700);
+}
+
 function hasSupabaseConfig() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && AI_INTAKE_FUNCTION_NAME);
 }
@@ -1037,6 +1082,7 @@ clearCanvas(standardCanvas);
 setSubmitState(false);
 syncArchivePreview();
 syncIdleStatus();
+bindEmbedHeightReporter();
 
 initializeSupabaseSession().catch((error) => {
   console.error(error);

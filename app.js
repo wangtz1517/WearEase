@@ -116,6 +116,12 @@ const addGarmentCloseButton = addGarmentModal
 const embeddedIntakePanel = document.querySelector("#embedded-intake-panel");
 const embeddedIntakeFrame = document.querySelector("#embedded-intake-frame");
 const homeSeasonNote = document.querySelector("#home-season-note");
+const homeRibbonMeta = document.querySelector("#home-ribbon-meta");
+const homeNextStep = document.querySelector("#home-next-step");
+const homePulseTitle = document.querySelector("#home-pulse-title");
+const homePulseCopy = document.querySelector("#home-pulse-copy");
+const homeFocusTitle = document.querySelector("#home-focus-title");
+const homeFocusCopy = document.querySelector("#home-focus-copy");
 const homeTotalCount = document.querySelector("#home-total-count");
 const homeTotalCopy = document.querySelector("#home-total-copy");
 const homeSeasonCount = document.querySelector("#home-season-count");
@@ -248,6 +254,7 @@ const WARDROBE_DEFAULT_VISIBLE_COLUMNS = WARDROBE_LIST_COLUMNS.map((column) => c
 let currentWardrobeVisibleColumns = WARDROBE_DEFAULT_VISIBLE_COLUMNS.slice();
 const aiIntakeChannel = "BroadcastChannel" in window ? new BroadcastChannel(AI_INTAKE_CHANNEL_NAME) : null;
 const handledAiIntakeTransferIds = new Set();
+let hasBoundAddViewFrameSizing = false;
 const savedOutfits = new Set(
   Array.from(favoriteButtons)
     .filter((button) => button.classList.contains("is-saved"))
@@ -318,6 +325,8 @@ let outfitHistoryDragStartScrollLeft = 0;
 let outfitHistoryDragMoved = false;
 let suppressOutfitHistoryClick = false;
 let activeOutfitScrollbarDrag = null;
+let activeOutfitTrackDrag = null;
+let suppressOutfitTrackClick = false;
 let outfitPreviewStageIntervalId = 0;
 let outfitPreviewStageTimeoutId = 0;
 
@@ -853,7 +862,12 @@ function ensureAddViewNavigation() {
   link.href = "#add";
   link.dataset.viewLink = "add";
   link.innerHTML = `
-    <span class="menu-mini" aria-hidden="true">＋</span>
+    <span class="menu-mini" aria-hidden="true">
+      <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M12 5.5v13" />
+        <path d="M5.5 12h13" />
+      </svg>
+    </span>
     <span class="menu-full">新增</span>
   `;
 
@@ -877,25 +891,70 @@ function ensureAddViewPage() {
   section.dataset.view = "add";
   section.setAttribute("aria-hidden", "true");
   section.innerHTML = `
-    <header class="page-hero compact-hero">
-      <div class="page-hero-copy compact-copy">
-        <div class="title-pair page-title-pair">
-          <h2>新增你的衣物</h2>
-          <p class="eyebrow">新增 / Add</p>
-        </div>
-        <p class="hero-text">上传原图，生成标准归档图，并直接加入主衣柜。</p>
-      </div>
+    <header class="page-hero compact-hero page-ribbon">
+      <p class="eyebrow page-ribbon-kicker">新增 / Add</p>
+      <h2>添加你的新衣服</h2>
+      <p class="page-ribbon-note">上传原图，AI 归档，再回填衣柜。</p>
     </header>
 
-    <section class="glass-panel simple-panel">
-      <section class="embedded-intake-panel add-view-panel">
-        <iframe
-          class="embedded-intake-frame add-view-frame"
-          title="衣物 AI 标准化处理台"
-          loading="lazy"
-          src="./studio/intake-studio.html?embed=1"
-        ></iframe>
-      </section>
+    <section class="glass-panel simple-panel add-workspace-panel">
+      <div class="add-workspace-layout">
+        <aside class="add-brief-panel">
+          <div class="section-head add-brief-head">
+            <div>
+              <p class="eyebrow">Add Flow</p>
+              <h3>把新增流程收成一个稳定工作台</h3>
+            </div>
+          </div>
+
+          <p class="add-brief-copy">
+            先上传原图，让 AI 统一裁切、背景和画面比例，再回到衣柜补充标签、位置和状态。
+            右侧处理区会固定在当前屏幕里，内容过长时在处理台内部滚动，不再把整页撑乱。
+          </p>
+
+          <div class="add-brief-points">
+            <article class="add-brief-point">
+              <span class="add-step-index">01</span>
+              <strong>上传原图</strong>
+              <p>把手机照片、平铺图或挂拍图先放进处理台，集中整理这一批新增衣物。</p>
+            </article>
+
+            <article class="add-brief-point">
+              <span class="add-step-index">02</span>
+              <strong>生成标准图</strong>
+              <p>让 AI 统一背景和裁切比例，得到适合归档、筛选和穿搭预览的图片。</p>
+            </article>
+
+            <article class="add-brief-point">
+              <span class="add-step-index">03</span>
+              <strong>回填衣柜信息</strong>
+              <p>处理完成后回到衣柜页，把分类、季节、位置和常穿状态补完整。</p>
+            </article>
+          </div>
+
+          <div class="add-brief-note">
+            <strong>工作区提示</strong>
+            <p>这一页默认占满当前屏幕。浏览器尺寸变化时，会优先保持窗口整齐，再选择内部滚动。</p>
+          </div>
+        </aside>
+
+        <section class="embedded-intake-panel add-view-panel">
+          <div class="add-frame-head">
+            <div>
+              <p class="eyebrow">AI Intake Studio</p>
+              <h3>标准化处理窗口</h3>
+            </div>
+            <p class="add-frame-note">右侧保持为独立处理区，方便连续上传、裁切和确认。</p>
+          </div>
+
+          <iframe
+            class="embedded-intake-frame add-view-frame"
+            title="衣物 AI 标准化处理台"
+            loading="lazy"
+            src="./studio/intake-studio.html?embed=1"
+          ></iframe>
+        </section>
+      </div>
     </section>
   `;
 
@@ -904,6 +963,70 @@ function ensureAddViewPage() {
   } else {
     mainContent.appendChild(section);
   }
+
+  bindAddViewFrameSizing();
+}
+
+function getAddViewFrame() {
+  return document.querySelector(".add-view-frame");
+}
+
+function applyAddViewFrameHeight(rawHeight) {
+  const frame = getAddViewFrame();
+  const height = Number(rawHeight);
+
+  if (!(frame instanceof HTMLIFrameElement) || !Number.isFinite(height) || height <= 0) {
+    return;
+  }
+
+  const viewportHeight = window.innerHeight || 0;
+  const viewportWidth = window.innerWidth || 0;
+  const minHeight = viewportWidth >= 1280 ? 700 : viewportWidth >= 860 ? 620 : 520;
+  const reservedHeight = viewportWidth >= 1280 ? 228 : viewportWidth >= 860 ? 188 : 148;
+  const maxHeight = viewportHeight > 0 ? Math.max(minHeight, viewportHeight - reservedHeight) : 1120;
+  const resolvedHeight = Math.min(maxHeight, Math.max(minHeight, Math.ceil(height) + 8));
+  frame.style.height = `${resolvedHeight}px`;
+  frame.style.minHeight = `${resolvedHeight}px`;
+}
+
+function syncAddViewFrameHeight() {
+  const frame = getAddViewFrame();
+
+  if (!(frame instanceof HTMLIFrameElement)) {
+    return;
+  }
+
+  try {
+    const documentElement = frame.contentDocument?.documentElement;
+    const body = frame.contentDocument?.body;
+    const nextHeight = Math.max(
+      documentElement?.scrollHeight || 0,
+      documentElement?.offsetHeight || 0,
+      body?.scrollHeight || 0,
+      body?.offsetHeight || 0
+    );
+
+    applyAddViewFrameHeight(nextHeight);
+  } catch {
+    // Ignore cross-frame sizing errors.
+  }
+}
+
+function bindAddViewFrameSizing() {
+  const frame = getAddViewFrame();
+
+  if (!(frame instanceof HTMLIFrameElement) || hasBoundAddViewFrameSizing) {
+    return;
+  }
+
+  hasBoundAddViewFrameSizing = true;
+  frame.addEventListener("load", () => {
+    syncAddViewFrameHeight();
+    window.setTimeout(syncAddViewFrameHeight, 160);
+    window.setTimeout(syncAddViewFrameHeight, 520);
+  });
+
+  window.addEventListener("resize", syncAddViewFrameHeight);
 }
 
 function setText(target, value) {
@@ -943,7 +1066,7 @@ function getRecentGarmentWindowCount(items = [], days = 7) {
   }).length;
 }
 
-function buildHomeRecentGarmentCardMarkup(item) {
+function buildHomeRecentGarmentCardMarkup(item, index = 0) {
   const ribbon = escapeHtml(item.location || "待整理");
   const name = escapeHtml(item.name || "未命名衣物");
   const category = escapeHtml(item.categoryText || "AI 导入");
@@ -951,8 +1074,8 @@ function buildHomeRecentGarmentCardMarkup(item) {
   const footer = escapeHtml(item.footer || item.frequency || "刚加入衣柜");
   const imageSource = item.imageUrl || item.imageDataUrl || "";
   const image = imageSource
-    ? `<img class="garment-photo" src="${escapeHtml(imageSource)}" alt="${name}" width="320" height="320" loading="lazy" decoding="async">`
-    : `<div class="garment-figure ${getFigureClass(item.type)}"></div>`;
+    ? `<div class="garment-media-shell"><img class="garment-photo" src="${escapeHtml(imageSource)}" alt="${name}" width="320" height="320" loading="lazy" decoding="async"></div>`
+    : `<div class="garment-media-shell"><div class="garment-figure ${getFigureClass(item.type)}"></div></div>`;
 
   return `
     <button class="mini-garment-card home-garment-card" type="button" data-home-garment-id="${escapeHtml(item.id)}">
@@ -968,7 +1091,7 @@ function buildHomeRecentGarmentCardMarkup(item) {
   `;
 }
 
-function buildHomeOutfitHistoryCardMarkup(entry) {
+function buildHomeOutfitHistoryCardMarkup(entry, index = 0) {
   const garmentRows = entry.garments.length
     ? entry.garments
       .slice(0, 3)
@@ -989,7 +1112,6 @@ function buildHomeOutfitHistoryCardMarkup(entry) {
     .filter(Boolean)
     .map((label) => `<span class="outfit-history-chip">${escapeHtml(label)}</span>`)
     .join("");
-
   return `
     <article class="home-outfit-card">
       <div class="outfit-history-image-shell">
@@ -1017,8 +1139,38 @@ function renderHomeDashboard() {
   const recentItems = items.slice(0, 4);
   const recentWindowCount = getRecentGarmentWindowCount(items, 7);
   const recentCount = recentWindowCount || recentItems.length;
+  const ribbonMeta = totalCount
+    ? `${totalCount} 件已归档 · ${seasonalCount} 件当前可穿`
+    : "先建立第一批常穿单品，首页就会开始形成节奏。";
+  const nextStep = !totalCount
+    ? "先添加 3 到 5 件最常穿的衣物，让首页开始真正形成你的衣橱工作面。"
+    : pendingCount > 0
+      ? `现在最值得先做的是处理 ${pendingCount} 件待整理单品，让衣柜状态和筛选结果先变干净。`
+      : outfitHistoryItems.length
+        ? "衣柜基础已经稳定，今天可以直接回到穿搭页继续生成，或者复用最近的试穿结果。"
+        : "衣柜已经有了基础单品，下一步建议去穿搭页生成第一套试穿图，让首页开始形成完整闭环。";
+  const pulseTitle = recentWindowCount
+    ? `近 7 天新增了 ${recentWindowCount} 件单品`
+    : totalCount
+      ? "最近没有新的归档变化"
+      : "衣橱还在起步阶段";
+  const pulseCopy = recentWindowCount
+    ? "保持这个录入节奏，首页会持续更新最近变化和更可执行的下一步。"
+    : totalCount
+      ? "可以补录最近买入或最常穿但还没归档的单品，让首页保持更新和可用。"
+      : "先把常穿衣物录进去，首页才会开始形成有用的数据和推荐节奏。";
+  const focusTitle = `当前重点：${seasonMeta.label}`;
+  const focusCopy = pendingCount
+    ? `${seasonMeta.focus} 是这段时间的重点，同时先清掉待整理状态，避免衣柜判断失真。`
+    : `${seasonMeta.focus} 是这段时间的重点，现在可以围绕当季单品继续补齐搭配和穿搭记录。`;
 
   setText(homeSeasonNote, `当前季节：${seasonMeta.label} · 重点：${seasonMeta.focus}`);
+  setText(homeRibbonMeta, ribbonMeta);
+  setText(homeNextStep, nextStep);
+  setText(homePulseTitle, pulseTitle);
+  setText(homePulseCopy, pulseCopy);
+  setText(homeFocusTitle, focusTitle);
+  setText(homeFocusCopy, focusCopy);
   setText(homeTotalCount, String(totalCount));
   setText(homeTotalCopy, totalCount ? "已归档的全部单品" : "还没有加入任何衣物");
   setText(homeSeasonCount, String(seasonalCount));
@@ -1030,7 +1182,7 @@ function renderHomeDashboard() {
 
   if (homeRecentGarments) {
     homeRecentGarments.innerHTML = recentItems.length
-      ? recentItems.map((item) => buildHomeRecentGarmentCardMarkup(item)).join("")
+      ? recentItems.map((item, index) => buildHomeRecentGarmentCardMarkup(item, index)).join("")
       : `
         <div class="home-empty-card">
           <strong>先把常穿衣服放进衣柜</strong>
@@ -1072,7 +1224,7 @@ function renderHomeDashboard() {
 
   homeOutfitHistory.innerHTML = outfitHistoryItems
     .slice(0, 2)
-    .map((entry) => buildHomeOutfitHistoryCardMarkup(entry))
+    .map((entry, index) => buildHomeOutfitHistoryCardMarkup(entry, index))
     .join("");
 }
 
@@ -1097,6 +1249,8 @@ function applySidebar(view) {
 function applyView(view) {
   const resolvedView = viewConfig[view] ? view : "home";
   currentView = resolvedView;
+  document.body.classList.toggle("home-view-active", resolvedView === "home");
+  document.body.classList.toggle("wardrobe-view-active", resolvedView === "wardrobe");
   document.body.classList.toggle("add-view-active", resolvedView === "add");
   document.body.classList.toggle("outfit-view-active", resolvedView === "outfit");
 
@@ -3036,6 +3190,74 @@ function endOutfitScrollbarDrag(event) {
   activeOutfitScrollbarDrag = null;
 }
 
+function startOutfitTrackDrag(event) {
+  if (!(event.target instanceof Element) || event.button !== 0 || activeOutfitScrollbarDrag) {
+    return;
+  }
+
+  const track = event.target.closest("[data-outfit-track]");
+
+  if (!(track instanceof HTMLElement) || event.target.closest("[data-outfit-scrollbar], [data-outfit-scroll]")) {
+    return;
+  }
+
+  activeOutfitTrackDrag = {
+    pointerId: event.pointerId,
+    track,
+    slotKey: track.dataset.outfitTrack || "",
+    startX: event.clientX,
+    startScrollLeft: track.scrollLeft,
+    moved: false
+  };
+
+  suppressOutfitTrackClick = false;
+  track.classList.add("is-dragging");
+  track.setPointerCapture?.(event.pointerId);
+}
+
+function moveOutfitTrackDrag(event) {
+  if (!activeOutfitTrackDrag || activeOutfitTrackDrag.pointerId !== event.pointerId) {
+    return;
+  }
+
+  const deltaX = event.clientX - activeOutfitTrackDrag.startX;
+
+  if (Math.abs(deltaX) >= OUTFIT_HISTORY_DRAG_THRESHOLD) {
+    activeOutfitTrackDrag.moved = true;
+  }
+
+  if (!activeOutfitTrackDrag.moved) {
+    return;
+  }
+
+  event.preventDefault();
+  activeOutfitTrackDrag.track.scrollLeft = activeOutfitTrackDrag.startScrollLeft - deltaX;
+  syncOutfitTrackScrollbar(activeOutfitTrackDrag.slotKey);
+}
+
+function endOutfitTrackDrag(event) {
+  if (!activeOutfitTrackDrag) {
+    return;
+  }
+
+  if (typeof event.pointerId === "number" && activeOutfitTrackDrag.pointerId !== event.pointerId) {
+    return;
+  }
+
+  const { track, moved } = activeOutfitTrackDrag;
+
+  if (moved) {
+    suppressOutfitTrackClick = true;
+  }
+
+  if (typeof event.pointerId === "number" && track.hasPointerCapture?.(event.pointerId)) {
+    track.releasePointerCapture(event.pointerId);
+  }
+
+  track.classList.remove("is-dragging");
+  activeOutfitTrackDrag = null;
+}
+
 function updateOutfitPreviewProcessing(title, copy) {
   if (outfitPreviewProcessingTitle) {
     outfitPreviewProcessingTitle.textContent = title;
@@ -3725,8 +3947,8 @@ function buildCustomGarmentCardMarkup(item) {
   const footer = escapeHtml(item.footer || "刚加入衣柜");
   const imageSource = item.imageUrl || item.imageDataUrl || "";
   const image = imageSource
-    ? `<img class="garment-photo" src="${escapeHtml(imageSource)}" alt="${name}" width="320" height="320" loading="lazy" decoding="async">`
-    : `<div class="garment-figure ${getFigureClass(item.type)}"></div>`;
+    ? `<div class="garment-media-shell"><img class="garment-photo" src="${escapeHtml(imageSource)}" alt="${name}" width="320" height="320" loading="lazy" decoding="async"></div>`
+    : `<div class="garment-media-shell"><div class="garment-figure ${getFigureClass(item.type)}"></div></div>`;
 
   return `
     <span class="card-ribbon">${ribbon}</span>
@@ -4239,6 +4461,12 @@ outfitSelectorRows?.addEventListener("click", (event) => {
     return;
   }
 
+  if (suppressOutfitTrackClick) {
+    suppressOutfitTrackClick = false;
+    event.preventDefault();
+    return;
+  }
+
   const scrollButton = event.target.closest("[data-outfit-scroll]");
 
   if (scrollButton) {
@@ -4265,6 +4493,11 @@ outfitSelectorRows?.addEventListener("pointermove", moveOutfitScrollbarDrag);
 outfitSelectorRows?.addEventListener("pointerup", endOutfitScrollbarDrag);
 outfitSelectorRows?.addEventListener("pointercancel", endOutfitScrollbarDrag);
 outfitSelectorRows?.addEventListener("lostpointercapture", endOutfitScrollbarDrag);
+outfitSelectorRows?.addEventListener("pointerdown", startOutfitTrackDrag);
+outfitSelectorRows?.addEventListener("pointermove", moveOutfitTrackDrag);
+outfitSelectorRows?.addEventListener("pointerup", endOutfitTrackDrag);
+outfitSelectorRows?.addEventListener("pointercancel", endOutfitTrackDrag);
+outfitSelectorRows?.addEventListener("lostpointercapture", endOutfitTrackDrag);
 
 outfitHistoryButton?.addEventListener("click", () => {
   openOutfitHistoryModal(outfitHistoryButton);
@@ -4605,6 +4838,16 @@ function consumePendingAiIntakeGarment(rawValue) {
 window.addEventListener("message", (event) => {
   const payload = event.data;
 
+  if (payload?.type === "ai-intake:embed-height") {
+    const addViewFrame = getAddViewFrame();
+
+    if (addViewFrame instanceof HTMLIFrameElement && addViewFrame.contentWindow === event.source) {
+      applyAddViewFrameHeight(payload.height);
+    }
+
+    return;
+  }
+
   if (!payload || payload.type !== "ai-intake:add-garment") {
     return;
   }
@@ -4796,6 +5039,7 @@ window.addEventListener("pageshow", () => {
 
 ensureAddViewNavigation();
 ensureAddViewPage();
+bindAddViewFrameSizing();
 bindAddViewLink();
 mountOutfitModelPanel();
 applyOutfitModelProfile(outfitAppliedModelProfile);
